@@ -1,18 +1,11 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
-	"html"
-	"io"
-	"io/ioutil"
 	"log"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/formatters"
-	"github.com/alecthomas/chroma/quick"
 	"github.com/lnenad/probester/communication"
+	"github.com/lnenad/probester/helpers"
 
 	"os"
 
@@ -21,6 +14,12 @@ import (
 )
 
 const appID = "com.mockadillo.probester"
+
+// IDs to access the tree view columns by
+const (
+	ColumnKey = iota
+	ColumnValue
+)
 
 func main() {
 	application, err := gtk.ApplicationNew(appID, glib.APPLICATION_FLAGS_NONE)
@@ -106,7 +105,129 @@ func buildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 		log.Fatal("Unable to create mainGrid:", err)
 	}
 	mainGrid.SetOrientation(gtk.ORIENTATION_VERTICAL)
-	pathGrid, _ := gtk.GridNew()
+
+	requestBodyWindow, requestText := getScrollableTextView("Request")
+
+	requestFrame, err := gtk.FrameNew("Request")
+	if err != nil {
+		log.Fatal("Unable to create Frame:", err)
+	}
+	requestFrame.SetMarginTop(10)
+	requestFrame.SetMarginEnd(10)
+	requestFrame.SetMarginBottom(10)
+	requestFrame.SetMarginStart(10)
+
+	responseBodyWindow, responseText := getScrollableTextView("Response")
+
+	responseFrame, err := gtk.FrameNew("Response")
+	if err != nil {
+		log.Fatal("Unable to create Frame:", err)
+	}
+	responseFrame.SetMarginTop(10)
+	responseFrame.SetMarginEnd(10)
+	responseFrame.SetMarginBottom(10)
+	responseFrame.SetMarginStart(10)
+
+	responseText.SetEditable(false)
+
+	pane, err := gtk.PanedNew(gtk.ORIENTATION_VERTICAL)
+	if err != nil {
+		log.Fatal("Unable to create paned:", err)
+	}
+
+	helpers.LoadAndDisplaySource(requestText, "test.json")
+
+	requestNotebook, err := gtk.NotebookNew()
+	if err != nil {
+		log.Fatal("Unable to create notebook:", err)
+	}
+	requestNotebookBodyLbl, err := gtk.LabelNew("Body")
+	if err != nil {
+		log.Fatal("Unable to create button:", err)
+	}
+	requestNotebookHeadersLbl, err := gtk.LabelNew("Headers")
+	if err != nil {
+		log.Fatal("Unable to create button:", err)
+	}
+	requestHeaders, err := gtk.GridNew()
+	if err != nil {
+		log.Fatal("Unable to create requestHeaders grid:", err)
+	}
+	requestHeaders.SetOrientation(gtk.ORIENTATION_VERTICAL)
+
+	requestHeadersButtonBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 10)
+	if err != nil {
+		log.Fatal("Unable to create requestHeadersButtonBox:", err)
+	}
+
+	requestTreeView, requestStore := setupTreeView(true)
+	deleteRequestHeaderBtn, _ := gtk.ButtonNewWithLabel("Delete selected header")
+	addRequestHeaderBtn, _ := gtk.ButtonNewWithLabel("Add a new header")
+
+	addRequestHeaderBtn.Connect("clicked", func() {
+		addRow(requestStore, "", "")
+	})
+
+	deleteRequestHeaderBtn.Connect("clicked", func() {
+		// requestTreeView.getAc
+	})
+
+	requestHeaders.SetVExpand(true)
+	requestHeaders.Add(requestTreeView)
+	requestHeadersButtonBox.SetVAlign(gtk.ALIGN_END)
+	requestHeadersButtonBox.PackEnd(deleteRequestHeaderBtn, false, false, 5)
+	requestHeadersButtonBox.PackEnd(addRequestHeaderBtn, false, false, 5)
+	requestHeaders.Add(requestHeadersButtonBox)
+
+	requestNotebook.AppendPage(requestBodyWindow, requestNotebookBodyLbl)
+	requestNotebook.AppendPage(requestHeaders, requestNotebookHeadersLbl)
+	requestFrame.Add(requestNotebook)
+
+	pane.Add(requestFrame)
+
+	responseNotebook, err := gtk.NotebookNew()
+	if err != nil {
+		log.Fatal("Unable to create notebook:", err)
+	}
+	responseNotebookBodyLbl, err := gtk.LabelNew("Body")
+	if err != nil {
+		log.Fatal("Unable to create button:", err)
+	}
+	responseNotebookHeadersLbl, err := gtk.LabelNew("Headers")
+	if err != nil {
+		log.Fatal("Unable to create button:", err)
+	}
+	responseHeaders, err := gtk.GridNew()
+	if err != nil {
+		log.Fatal("Unable to create responseHeaders grid:", err)
+	}
+
+	responseTreeView, responseStore := setupTreeView(false)
+	responseHeaders.Add(responseTreeView)
+
+	responseNotebook.AppendPage(responseBodyWindow, responseNotebookBodyLbl)
+	responseNotebook.AppendPage(responseHeaders, responseNotebookHeadersLbl)
+	responseFrame.Add(responseNotebook)
+	pane.Add(responseFrame)
+
+	pathGrid := getPathGrid(requestText, responseText, requestStore, responseStore)
+
+	mainGrid.Add(pathGrid)
+	mainGrid.Add(pane)
+
+	win.Add(mainGrid)
+	win.SetTitlebar(header)
+	win.SetPosition(gtk.WIN_POS_MOUSE)
+	win.SetDefaultSize(600, 700)
+
+	win.ShowAll()
+	//requestBodyWindow.SetVisible(false)
+
+	return win
+}
+
+func getPathGrid(requestText, responseText *gtk.TextView, requestStore, responseStore *gtk.ListStore) *gtk.Grid {
+	pathGrid, err := gtk.GridNew()
 	if err != nil {
 		log.Fatal("Unable to create pathGrid:", err)
 	}
@@ -139,49 +260,13 @@ func buildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 	if err != nil {
 		log.Fatal("Unable to create Button:", err)
 	}
-	// Assemble the window
-	pathGrid.Add(pathMethod)
-	pathGrid.Add(pathInput)
-	pathGrid.Add(sendRequestBtn)
-
-	pathGrid.SetHExpand(true)
-
-	requestBodyWindow, requestText := getJSONFrame("Request")
-
-	requestFrame, err := gtk.FrameNew("Request")
-	if err != nil {
-		log.Fatal("Unable to create Frame:", err)
-	}
-	requestFrame.SetMarginTop(10)
-	requestFrame.SetMarginEnd(10)
-	requestFrame.SetMarginBottom(10)
-	requestFrame.SetMarginStart(10)
-
-	responseWindow, responseText := getJSONFrame("Response")
-
-	responseFrame, err := gtk.FrameNew("Response")
-	if err != nil {
-		log.Fatal("Unable to create Frame:", err)
-	}
-	responseFrame.SetMarginTop(10)
-	responseFrame.SetMarginEnd(10)
-	responseFrame.SetMarginBottom(10)
-	responseFrame.SetMarginStart(10)
-	responseFrame.Add(responseText)
-
-	responseText.SetEditable(false)
-
-	pane, err := gtk.PanedNew(gtk.ORIENTATION_VERTICAL)
-	if err != nil {
-		log.Fatal("Unable to create paned:", err)
-	}
 
 	pathMethod.Connect("changed", func() {
 		method := pathMethod.GetActiveText()
 		if method == "GET" || method == "HEAD" {
-			requestFrame.SetVisible(false)
+			//requestFrame.SetVisible(false)
 		} else {
-			requestFrame.SetVisible(true)
+			//requestFrame.SetVisible(true)
 		}
 	})
 	sendRequestBtn.Connect("clicked", func() {
@@ -193,45 +278,24 @@ func buildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 		}
 		response, responseBody := communication.Send(url, method, nil, requestBody)
 		fmt.Printf("Response: %#v\n", response)
-		displaySource(responseText, string(responseBody))
+		helpers.DisplaySource(responseText, string(responseBody))
+		responseStore.Clear()
+		for name, values := range response.Header {
+			// Loop over all values for the name.
+			for _, value := range values {
+				fmt.Println(name, value)
+				addRow(responseStore, name, value)
+			}
+		}
 	})
 
-	loadAndDispSource(requestText, "test.json")
+	// Assemble the window
+	pathGrid.Add(pathMethod)
+	pathGrid.Add(pathInput)
+	pathGrid.Add(sendRequestBtn)
 
-	requestNotebook, err := gtk.NotebookNew()
-	if err != nil {
-		log.Fatal("Unable to create notebook:", err)
-	}
-	requestNotebookBodyLbl, err := gtk.LabelNew("Request Body")
-	if err != nil {
-		log.Fatal("Unable to create button:", err)
-	}
-	requestNotebookHeadersLbl, err := gtk.LabelNew("Request Headers")
-	if err != nil {
-		log.Fatal("Unable to create button:", err)
-	}
-	requestHeaders, err := gtk.GridNew()
-	if err != nil {
-		log.Fatal("Unable to create requestHeaders grid:", err)
-	}
-	requestNotebook.AppendPage(requestBodyWindow, requestNotebookBodyLbl)
-	requestNotebook.AppendPage(requestHeaders, requestNotebookHeadersLbl)
-	requestFrame.Add(requestNotebook)
-	pane.Add(requestFrame)
-
-	pane.Add(responseFrame)
-	mainGrid.Add(pathGrid)
-	mainGrid.Add(pane)
-
-	win.Add(mainGrid)
-	win.SetTitlebar(header)
-	win.SetPosition(gtk.WIN_POS_MOUSE)
-	win.SetDefaultSize(600, 700)
-
-	win.ShowAll()
-	requestBodyWindow.SetVisible(false)
-
-	return win
+	pathGrid.SetHExpand(true)
+	return pathGrid
 }
 
 func getText(textView *gtk.TextView) (string, error) {
@@ -241,7 +305,7 @@ func getText(textView *gtk.TextView) (string, error) {
 	return buffer.GetText(start, end, true)
 }
 
-func getJSONFrame(frameLabel string) (*gtk.ScrolledWindow, *gtk.TextView) {
+func getScrollableTextView(frameLabel string) (*gtk.ScrolledWindow, *gtk.TextView) {
 	// Label text in the window
 	textView, err := gtk.TextViewNew()
 	if err != nil {
@@ -263,98 +327,63 @@ func getJSONFrame(frameLabel string) (*gtk.ScrolledWindow, *gtk.TextView) {
 	return scrolledWindow, textView
 }
 
-// loadAndDispSource:
-func loadAndDispSource(textView *gtk.TextView, filename string) {
-	text, err := ioutil.ReadFile(filename)
+// Add a column to the tree view (during the initialization of the tree view)
+func createColumn(title string, id int, editable bool) *gtk.TreeViewColumn {
+	cellRenderer, err := gtk.CellRendererTextNew()
 	if err != nil {
-		log.Fatal("Unable to load file:", err)
+		log.Fatal("Unable to create text cell renderer:", err)
 	}
-	displaySource(textView, string(text))
-}
-
-func displaySource(textView *gtk.TextView, text string) {
-	// Get source formatted using pango markup format
-	formattedSource, err := ChromaHighlight(text)
-
-	// fill TextµBuffer with formatted text
-	buff, err := textView.GetBuffer()
+	if editable {
+		cellRenderer.SetProperty("editable", true)
+	}
+	column, err := gtk.TreeViewColumnNewWithAttribute(title, cellRenderer, "text", id)
 	if err != nil {
-		log.Fatal("Unable to retrieve TextBuffer:", err)
+		log.Fatal("Unable to create cell column:", err)
 	}
-	// Clean text window before fill it
-	buff.Delete(buff.GetStartIter(), buff.GetEndIter())
+	column.SetResizable(true)
 
-	// insert markup to the TextBuffer
-	buff.InsertMarkup(buff.GetStartIter(), formattedSource)
+	if editable {
+		cellRenderer.Connect("edited", func(crt *gtk.CellRendererText, row string, value string) {
+			fmt.Printf("Edited: %#v %#v %#v %#v\n", title, id, row, value)
+		})
+	}
+
+	return column
 }
 
-// ChromaHighlight Syntax highlighter using Chroma syntax
-// highlighter: "github.com/alecthomas/chroma"
-// informations above
-func ChromaHighlight(inputString string) (out string, err error) {
-	buff := new(bytes.Buffer)
-	writer := bufio.NewWriter(buff)
-
-	// Registrering pango formatter
-	formatters.Register("pango", chroma.FormatterFunc(pangoFormatter))
-
-	// Doing the job (io.Writer, SourceText, language(go), Lexer(pango), style(pygments))
-	if err = quick.Highlight(writer, inputString, "json", "pango", "pygments"); err != nil {
-		return
+// Creates a tree view and the list store that holds its data
+func setupTreeView(editable bool) (*gtk.TreeView, *gtk.ListStore) {
+	treeView, err := gtk.TreeViewNew()
+	if err != nil {
+		log.Fatal("Unable to create tree view:", err)
 	}
-	writer.Flush()
-	return string(buff.Bytes()), err
+
+	treeView.SetHExpand(true)
+
+	treeView.AppendColumn(createColumn("Header Name", ColumnKey, editable))
+	treeView.AppendColumn(createColumn("Header Value", ColumnValue, editable))
+
+	// Creating a list store. This is what holds the data that will be shown on our tree view.
+	listStore, err := gtk.ListStoreNew(glib.TYPE_STRING, glib.TYPE_STRING)
+	if err != nil {
+		log.Fatal("Unable to create list store:", err)
+	}
+	treeView.SetModel(listStore)
+
+	return treeView, listStore
 }
 
-// pangoFormatter: is a part of "ChromaHighlight" library
-// This is the Pango version, wich not use tags functionality
-// but only Pango markup style. The complete libray include
-// more functionalities and speed improvement of 80% using
-// Tags and TextBuffer capabilities.
-func pangoFormatter(w io.Writer, style *chroma.Style, it chroma.Iterator) error {
-	var r, g, b uint8
-	var closer, out string
+// Append a row to the list store for the tree view
+func addRow(listStore *gtk.ListStore, key, value string) {
+	// Get an iterator for a new row at the end of the list store
+	iter := listStore.Append()
 
-	var getColour = func(color chroma.Colour) string {
-		r, g, b = color.Red(), color.Green(), color.Blue()
-		return fmt.Sprintf("#%02X%02X%02X", r, g, b)
+	// Set the contents of the list store row that the iterator represents
+	err := listStore.Set(iter,
+		[]int{ColumnKey, ColumnValue},
+		[]interface{}{key, value})
+
+	if err != nil {
+		log.Fatal("Unable to add row:", err)
 	}
-
-	for tkn := it(); tkn != chroma.EOF; tkn = it() {
-
-		entry := style.Get(tkn.Type)
-		if !entry.IsZero() {
-			if entry.Bold == chroma.Yes {
-				out = `<b>`
-				closer = `</b>`
-			}
-			if entry.Underline == chroma.Yes {
-				out += `<u>`
-				closer = `</u>` + closer
-			}
-			if entry.Italic == chroma.Yes {
-				out += `<i>`
-				closer = `</i>` + closer
-			}
-			if entry.Colour.IsSet() {
-				out += `<span foreground="` + getColour(entry.Colour) + `">`
-				closer = `</span>` + closer
-			}
-			if entry.Background.IsSet() {
-				out += `<span background="` + getColour(entry.Background) + `">`
-				closer = `</span>` + closer
-			}
-			if entry.Border.IsSet() {
-				out += `<span background="` + getColour(entry.Border) + `">`
-				closer = `</span>` + closer
-			}
-			fmt.Fprint(w, out)
-		}
-		fmt.Fprint(w, html.EscapeString(tkn.Value))
-		if !entry.IsZero() {
-			fmt.Fprint(w, closer)
-		}
-		closer, out = "", ""
-	}
-	return nil
 }

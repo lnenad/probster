@@ -12,17 +12,25 @@ func Send(url, method string, headers []string, body string) (*http.Response, []
 	fmt.Printf("Sending rq: %#v %#v %#v %#v \n", url, method, headers, body)
 	// create request body
 	var reqBody *strings.Reader
+	var req *http.Request
 
 	if method != "GET" && method != "HEAD" {
 		reqBody = strings.NewReader(body)
-	}
 
-	// create a request object
-	req, _ := http.NewRequest(
-		method,
-		url,
-		reqBody,
-	)
+		// create a request object
+		req, _ = http.NewRequest(
+			method,
+			url,
+			reqBody,
+		)
+	} else {
+		// create a request object
+		req, _ = http.NewRequest(
+			method,
+			url,
+			nil,
+		)
+	}
 
 	// add a request header
 	//req.Header.Add("Content-Type", "application/json; charset=UTF-8")
