@@ -16,18 +16,18 @@ import (
 )
 
 // LoadAndDisplaySource
-func LoadAndDisplaySource(textView *gtk.TextView, filename string) {
+func LoadAndDisplaySource(contentType string, textView *gtk.TextView, filename string) {
 	text, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log.Fatal("Unable to load file:", err)
 	}
-	DisplaySource(textView, string(text))
+	DisplaySource(contentType, textView, string(text))
 }
 
 // DisplaySource
-func DisplaySource(textView *gtk.TextView, text string) {
+func DisplaySource(contentType string, textView *gtk.TextView, text string) {
 	// Get source formatted using pango markup format
-	formattedSource, err := chromaHighlight(text)
+	formattedSource, err := chromaHighlight(contentType, text)
 
 	// fill TextµBuffer with formatted text
 	buff, err := textView.GetBuffer()
@@ -44,7 +44,7 @@ func DisplaySource(textView *gtk.TextView, text string) {
 // chromaHighlight Syntax highlighter using Chroma syntax
 // highlighter: "github.com/alecthomas/chroma"
 // informations above
-func chromaHighlight(inputString string) (out string, err error) {
+func chromaHighlight(contentType, inputString string) (out string, err error) {
 	buff := new(bytes.Buffer)
 	writer := bufio.NewWriter(buff)
 
@@ -52,7 +52,20 @@ func chromaHighlight(inputString string) (out string, err error) {
 	formatters.Register("pango", chroma.FormatterFunc(pangoFormatter))
 
 	// Doing the job (io.Writer, SourceText, language(go), Lexer(pango), style(pygments))
-	if err = quick.Highlight(writer, inputString, "json", "pango", "pygments"); err != nil {
+	var language string
+	switch contentType {
+	case "application/json":
+		language = "json"
+	case "text/html":
+		language = "html"
+	case "text/xml":
+		fallthrough
+	case "application/xml":
+		fallthrough
+	case "image/svg+xml":
+		language = "xml"
+	}
+	if err = quick.Highlight(writer, inputString, language, "pango", "pygments"); err != nil {
 		return
 	}
 	writer.Flush()

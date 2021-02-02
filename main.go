@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"regexp"
 
 	"github.com/lnenad/probester/communication"
 	"github.com/lnenad/probester/helpers"
@@ -14,6 +15,8 @@ import (
 )
 
 const appID = "com.mockadillo.probester"
+
+var headerRegex = regexp.MustCompile(`^[\w-]+$`)
 
 // IDs to access the tree view columns by
 const (
@@ -53,6 +56,20 @@ func buildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 	}
 
 	win.SetTitle("Probester")
+
+	errorDiag := gtk.MessageDialogNew(
+		win,
+		gtk.DIALOG_MODAL,
+		gtk.MESSAGE_ERROR,
+		gtk.BUTTONS_CLOSE,
+		"",
+	)
+
+	errorDiag.Connect("response", func() bool {
+		errorDiag.Hide()
+		return true
+	})
+	errorDiag.SetTitle("Error")
 
 	// Create a header bar
 	header, err := gtk.HeaderBarNew()
@@ -135,7 +152,7 @@ func buildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 		log.Fatal("Unable to create paned:", err)
 	}
 
-	helpers.LoadAndDisplaySource(requestText, "test.json")
+	helpers.LoadAndDisplaySource("application/json", requestText, "test.json")
 
 	requestNotebook, err := gtk.NotebookNew()
 	if err != nil {
@@ -155,35 +172,63 @@ func buildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 	}
 	requestHeaders.SetOrientation(gtk.ORIENTATION_VERTICAL)
 
-	requestHeadersButtonBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 10)
+	requestHeadersButtonBox, err := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
 	if err != nil {
 		log.Fatal("Unable to create requestHeadersButtonBox:", err)
 	}
 
-	requestTreeView, requestStore := setupTreeView(true)
+	requestHeadersButtonBox.SetMarginBottom(5)
+	requestHeadersButtonBox.SetMarginEnd(10)
+	requestHeadersButtonBox.SetBorderWidth(10)
+
+	requestTreeScroll, requestTreeView, requestStore := setupTreeView(errorDiag, true)
 	deleteRequestHeaderBtn, _ := gtk.ButtonNewWithLabel("Delete selected header")
 	addRequestHeaderBtn, _ := gtk.ButtonNewWithLabel("Add a new header")
 
 	addRequestHeaderBtn.Connect("clicked", func() {
-		addRow(requestStore, "", "")
+		addRow(requestStore, "Name", "Value")
 	})
 
 	deleteRequestHeaderBtn.Connect("clicked", func() {
-		// requestTreeView.getAc
+		selection, err := requestTreeView.GetSelection()
+		if err != nil {
+			log.Fatal("Unable to get tree view selection:", err)
+		}
+		selected := selection.GetSelectedRows(&requestStore.TreeModel)
+		if err != nil {
+			log.Fatal("Unable to get tree view selected rows:", err)
+		}
+		fmt.Printf("%#v\n", selected)
+		selected.Foreach(func(item interface{}) {
+			fmt.Printf("%#v\n", item)
+			iter, err := requestStore.GetIter(item.(*gtk.TreePath))
+			if err != nil {
+				log.Fatal("Unable to get tree view iter:", err)
+			}
+			requestStore.Remove(iter)
+		})
 	})
 
 	requestHeaders.SetVExpand(true)
-	requestHeaders.Add(requestTreeView)
+	requestTreeView.SetVExpand(true)
+	requestTreeScroll.SetVExpand(true)
+	requestHeaders.Add(requestTreeScroll)
 	requestHeadersButtonBox.SetVAlign(gtk.ALIGN_END)
-	requestHeadersButtonBox.PackEnd(deleteRequestHeaderBtn, false, false, 5)
-	requestHeadersButtonBox.PackEnd(addRequestHeaderBtn, false, false, 5)
+	requestHeadersButtonBox.PackEnd(deleteRequestHeaderBtn, false, false, 3)
+	requestHeadersButtonBox.PackEnd(addRequestHeaderBtn, false, false, 3)
+
+	sep, _ := gtk.SeparatorNew(gtk.ORIENTATION_HORIZONTAL)
+
+	requestHeaders.Add(sep)
 	requestHeaders.Add(requestHeadersButtonBox)
 
 	requestNotebook.AppendPage(requestBodyWindow, requestNotebookBodyLbl)
 	requestNotebook.AppendPage(requestHeaders, requestNotebookHeadersLbl)
 	requestFrame.Add(requestNotebook)
+	requestNotebook.SetVExpand(true)
+	requestFrame.SetVExpand(true)
 
-	pane.Add(requestFrame)
+	pane.Add1(requestFrame)
 
 	responseNotebook, err := gtk.NotebookNew()
 	if err != nil {
@@ -202,18 +247,26 @@ func buildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 		log.Fatal("Unable to create responseHeaders grid:", err)
 	}
 
-	responseTreeView, responseStore := setupTreeView(false)
-	responseHeaders.Add(responseTreeView)
+	responseTreeScroll, _, responseStore := setupTreeView(errorDiag, false)
+	responseHeaders.Add(responseTreeScroll)
+	responseTreeScroll.SetVExpand(true)
 
 	responseNotebook.AppendPage(responseBodyWindow, responseNotebookBodyLbl)
 	responseNotebook.AppendPage(responseHeaders, responseNotebookHeadersLbl)
-	responseFrame.Add(responseNotebook)
-	pane.Add(responseFrame)
 
-	pathGrid := getPathGrid(requestText, responseText, requestStore, responseStore)
+	responseFrame.Add(responseNotebook)
+	pane.Add2(responseFrame)
+
+	responseStatusLbl, _ := gtk.LabelNew("Status Code: ---")
+	responseStatusLbl.SetMarginBottom(10)
+	responseStatusLbl.SetMarginEnd(20)
+	responseStatusLbl.SetHAlign(gtk.ALIGN_END)
+
+	pathGrid := getPathGrid(requestText, responseText, requestStore, responseStore, responseStatusLbl, requestBodyWindow)
 
 	mainGrid.Add(pathGrid)
 	mainGrid.Add(pane)
+	mainGrid.Add(responseStatusLbl)
 
 	win.Add(mainGrid)
 	win.SetTitlebar(header)
@@ -221,12 +274,18 @@ func buildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 	win.SetDefaultSize(600, 700)
 
 	win.ShowAll()
-	//requestBodyWindow.SetVisible(false)
+
+	requestBodyWindow.SetVisible(false)
 
 	return win
 }
 
-func getPathGrid(requestText, responseText *gtk.TextView, requestStore, responseStore *gtk.ListStore) *gtk.Grid {
+func getPathGrid(
+	requestText, responseText *gtk.TextView,
+	requestStore, responseStore *gtk.ListStore,
+	responseStatusLbl *gtk.Label,
+	requestBodyWindow *gtk.ScrolledWindow,
+) *gtk.Grid {
 	pathGrid, err := gtk.GridNew()
 	if err != nil {
 		log.Fatal("Unable to create pathGrid:", err)
@@ -264,9 +323,9 @@ func getPathGrid(requestText, responseText *gtk.TextView, requestStore, response
 	pathMethod.Connect("changed", func() {
 		method := pathMethod.GetActiveText()
 		if method == "GET" || method == "HEAD" {
-			//requestFrame.SetVisible(false)
+			requestBodyWindow.SetVisible(false)
 		} else {
-			//requestFrame.SetVisible(true)
+			requestBodyWindow.SetVisible(true)
 		}
 	})
 	sendRequestBtn.Connect("clicked", func() {
@@ -276,9 +335,11 @@ func getPathGrid(requestText, responseText *gtk.TextView, requestStore, response
 		if err != nil {
 			log.Fatal("Unable to retrieve text from requestTextView:", err)
 		}
-		response, responseBody := communication.Send(url, method, nil, requestBody)
+		requstHeaders := getListStoreContents(requestStore)
+		response, responseBody := communication.Send(url, method, requstHeaders, requestBody)
 		fmt.Printf("Response: %#v\n", response)
-		helpers.DisplaySource(responseText, string(responseBody))
+		contentType := response.Header.Get("content-type")
+		helpers.DisplaySource(contentType, responseText, string(responseBody))
 		responseStore.Clear()
 		for name, values := range response.Header {
 			// Loop over all values for the name.
@@ -287,6 +348,7 @@ func getPathGrid(requestText, responseText *gtk.TextView, requestStore, response
 				addRow(responseStore, name, value)
 			}
 		}
+		responseStatusLbl.SetText(fmt.Sprintf("Status Code: %d", response.StatusCode))
 	})
 
 	// Assemble the window
@@ -296,6 +358,41 @@ func getPathGrid(requestText, responseText *gtk.TextView, requestStore, response
 
 	pathGrid.SetHExpand(true)
 	return pathGrid
+}
+
+func getListStoreContents(store *gtk.ListStore) map[string][]string {
+	result := make(map[string][]string)
+	iter, err := store.GetIterFirst()
+	if err != true {
+		return result
+	}
+	for {
+		k, err := getStringValue(store, iter, ColumnKey)
+		if err != nil {
+			log.Fatal("Error getting value from store tree model: ", err)
+		}
+		v, err := getStringValue(store, iter, ColumnValue)
+		if err != nil {
+			log.Fatal("Error getting value from store tree model: ", err)
+		}
+		if _, ok := result[k]; ok {
+			result[k] = append(result[k], v)
+		} else {
+			result[k] = []string{v}
+		}
+		if !store.IterNext(iter) {
+			break
+		}
+	}
+	return result
+}
+
+func getStringValue(store *gtk.ListStore, iter *gtk.TreeIter, column int) (string, error) {
+	k, err := store.TreeModel.GetValue(iter, column)
+	if err != nil {
+		log.Fatal("Error getting value from store tree model: ", err)
+	}
+	return k.GetString()
 }
 
 func getText(textView *gtk.TextView) (string, error) {
@@ -328,7 +425,7 @@ func getScrollableTextView(frameLabel string) (*gtk.ScrolledWindow, *gtk.TextVie
 }
 
 // Add a column to the tree view (during the initialization of the tree view)
-func createColumn(title string, id int, editable bool) *gtk.TreeViewColumn {
+func createColumn(errorDiag *gtk.MessageDialog, title string, id int, editable bool, listStore *gtk.ListStore) *gtk.TreeViewColumn {
 	cellRenderer, err := gtk.CellRendererTextNew()
 	if err != nil {
 		log.Fatal("Unable to create text cell renderer:", err)
@@ -345,6 +442,16 @@ func createColumn(title string, id int, editable bool) *gtk.TreeViewColumn {
 	if editable {
 		cellRenderer.Connect("edited", func(crt *gtk.CellRendererText, row string, value string) {
 			fmt.Printf("Edited: %#v %#v %#v %#v\n", title, id, row, value)
+			rowIter, err := listStore.GetIterFromString(row)
+			if err != nil {
+				log.Fatal("Unable to get row iter:", err)
+			}
+			if id == ColumnKey && !headerRegex.Match([]byte(value)) {
+				errorDiag.FormatSecondaryText("Invalid Header Name. No spaces allowed")
+				errorDiag.Run()
+				return
+			}
+			listStore.SetValue(rowIter, id, value)
 		})
 	}
 
@@ -352,16 +459,13 @@ func createColumn(title string, id int, editable bool) *gtk.TreeViewColumn {
 }
 
 // Creates a tree view and the list store that holds its data
-func setupTreeView(editable bool) (*gtk.TreeView, *gtk.ListStore) {
+func setupTreeView(errorDiag *gtk.MessageDialog, editable bool) (*gtk.ScrolledWindow, *gtk.TreeView, *gtk.ListStore) {
 	treeView, err := gtk.TreeViewNew()
 	if err != nil {
 		log.Fatal("Unable to create tree view:", err)
 	}
 
 	treeView.SetHExpand(true)
-
-	treeView.AppendColumn(createColumn("Header Name", ColumnKey, editable))
-	treeView.AppendColumn(createColumn("Header Value", ColumnValue, editable))
 
 	// Creating a list store. This is what holds the data that will be shown on our tree view.
 	listStore, err := gtk.ListStoreNew(glib.TYPE_STRING, glib.TYPE_STRING)
@@ -370,7 +474,16 @@ func setupTreeView(editable bool) (*gtk.TreeView, *gtk.ListStore) {
 	}
 	treeView.SetModel(listStore)
 
-	return treeView, listStore
+	treeView.AppendColumn(createColumn(errorDiag, "Header Name", ColumnKey, editable, listStore))
+	treeView.AppendColumn(createColumn(errorDiag, "Header Value", ColumnValue, editable, listStore))
+
+	scrolledWindow, err := gtk.ScrolledWindowNew(nil, nil)
+	if err != nil {
+		log.Fatal("Unable to create ScrolledWindow:", err)
+	}
+	scrolledWindow.Add(treeView)
+
+	return scrolledWindow, treeView, listStore
 }
 
 // Append a row to the list store for the tree view

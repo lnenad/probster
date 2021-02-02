@@ -8,7 +8,8 @@ import (
 	"strings"
 )
 
-func Send(url, method string, headers []string, body string) (*http.Response, []byte) {
+// Send sends the HTTP request
+func Send(url, method string, headers map[string][]string, body string) (*http.Response, []byte) {
 	fmt.Printf("Sending rq: %#v %#v %#v %#v \n", url, method, headers, body)
 	// create request body
 	var reqBody *strings.Reader
@@ -32,9 +33,11 @@ func Send(url, method string, headers []string, body string) (*http.Response, []
 		)
 	}
 
-	// add a request header
-	//req.Header.Add("Content-Type", "application/json; charset=UTF-8")
-
+	for k, values := range headers {
+		for _, v := range values {
+			req.Header.Add(k, v)
+		}
+	}
 	// send an HTTP using `req` object
 	res, err := http.DefaultClient.Do(req)
 
