@@ -1,4 +1,4 @@
-module github.com/lnenad/probester
+module github.com/lnenad/probster
 
 go 1.13
 

@@ -1,4 +1,4 @@
 go.sum
-probester.exe
-build/probester.exe
+probster.exe
+build/probster.exe
 build/share

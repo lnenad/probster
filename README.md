@@ -1,4 +1,4 @@
-# Probester
+# Probster
 
 API probing tool
 
@@ -13,7 +13,7 @@ https://github.com/gotk3/gotk3/wiki/Installing-on-macOS
 
 Extract and copy deps to build (exec from mingw64)
 
-`ldd probester.exe | grep '\/mingw.*\.dll' -o | xargs -I{} cp "{}" build`
+`ldd probster.exe | grep '\/mingw.*\.dll' -o | xargs -I{} cp "{}" build`
 
 Copy `dbus.exe` from `/msys64/mingw64/bin` folder to `build`
 

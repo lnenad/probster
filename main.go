@@ -5,8 +5,8 @@ import (
 	"log"
 	"regexp"
 
-	"github.com/lnenad/probester/communication"
-	"github.com/lnenad/probester/helpers"
+	"github.com/lnenad/probster/communication"
+	"github.com/lnenad/probster/helpers"
 
 	"os"
 
@@ -14,7 +14,7 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 )
 
-const appID = "com.mockadillo.probester"
+const appID = "com.mockadillo.probster"
 
 var headerRegex = regexp.MustCompile(`^[\w-]+$`)
 
@@ -55,7 +55,7 @@ func buildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 		log.Fatal("Unable to create window:", err)
 	}
 
-	win.SetTitle("Probester")
+	win.SetTitle("Probster")
 
 	errorDiag := gtk.MessageDialogNew(
 		win,
@@ -77,7 +77,7 @@ func buildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 		log.Fatal("Could not create header bar:", err)
 	}
 	header.SetShowCloseButton(true)
-	header.SetTitle("Probester")
+	header.SetTitle("Probster - REST Easy")
 	header.SetSubtitle("API testing tool")
 
 	// Create a new menu button
@@ -268,16 +268,46 @@ func buildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 	mainGrid.Add(pane)
 	mainGrid.Add(responseStatusLbl)
 
-	win.Add(mainGrid)
+	sideGrid, _ := gtk.GridNew()
+	listView, _ := gtk.ListBoxNew()
+	listView.SetVExpand(true)
+	listView.SetHExpand(true)
+	sideGrid.SetVExpand(true)
+	sideGrid.SetHExpand(true)
+	listRow := getHistoryRow("Item name")
+
+	listView.Add(listRow)
+	sideGrid.Add(listView)
+
+	windowPane, _ := gtk.PanedNew(gtk.ORIENTATION_HORIZONTAL)
+
+	windowPane.Add(sideGrid)
+	windowPane.Add(mainGrid)
+	win.Add(windowPane)
 	win.SetTitlebar(header)
 	win.SetPosition(gtk.WIN_POS_MOUSE)
-	win.SetDefaultSize(600, 700)
+	win.SetDefaultSize(900, 700)
 
 	win.ShowAll()
 
 	requestBodyWindow.SetVisible(false)
 
 	return win
+}
+
+func getHistoryRow(itemName string) *gtk.ListBoxRow {
+	listRow, _ := gtk.ListBoxRowNew()
+	box, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
+	btn, _ := gtk.ButtonNew()
+	btn.SetHAlign(gtk.ALIGN_END)
+	lbl, _ := gtk.LabelNew(itemName)
+	lbl.SetHExpand(true)
+	btn.SetLabel("Delete")
+	box.Add(lbl)
+	box.Add(btn)
+	listRow.Add(box)
+	listRow.SetHExpand(true)
+	return listRow
 }
 
 func getPathGrid(
