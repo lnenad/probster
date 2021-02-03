@@ -21,4 +21,18 @@ Copy `lib/gdk-pixbuf-2.0` from `/msys64/mingw64/` folder to `build/lib`
 
 Copy `share/icons` from `/msys64/mingw64/` to `build/share`
 
+Generate syso file to embed icon to executable using `https://github.com/akavel/rsrc`
+
+`rsrc -ico build/icon.ico`
+
 Compile with `CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -i -ldflags -H=windowsgui`
+
+## Important
+
+GTK is not thread safe so this is helpful
+
+https://github.com/conformal/gotk3/blob/master/gtk/examples/goroutines/goroutines.go
+
+## Maintainers 
+
+* [lnenad](https://github.com/lnenad)
