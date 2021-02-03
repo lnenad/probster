@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"log"
 
+	evbus "github.com/asaskevich/EventBus"
 	"github.com/gotk3/gotk3/gtk"
 	"github.com/lnenad/probster/storage"
 )
 
-func GetSidebar(h *storage.History) (*gtk.Grid, *gtk.ListBox) {
+func GetSidebar(h *storage.History, bus evbus.Bus) (*gtk.Grid, *gtk.ListBox) {
 	sideGrid, _ := gtk.GridNew()
 	sideGrid.SetOrientation(gtk.ORIENTATION_VERTICAL)
 	sideGrid.SetVExpand(true)
@@ -18,14 +19,21 @@ func GetSidebar(h *storage.History) (*gtk.Grid, *gtk.ListBox) {
 	listView.SetVExpand(true)
 	listView.SetHExpand(true)
 
-	requestHistory := h.GetAllRequests()
-	for key, entry := range requestHistory {
-		AddHistoryRow(h, listView, key, entry.Request.Method, entry.Request.Path, entry.Response.StatusCode)
+	requestHistory := h.GetAllRequests(true)
+	for _, entry := range requestHistory {
+		AddHistoryRow(h, listView, entry.Key, entry.RR)
 	}
 
 	listView.Connect("row_selected", func(lb *gtk.ListBox, row *gtk.ListBoxRow) {
-		if lb.GetChildren().Length() > 0 {
-			log.Printf("%#v\n", row.GetIndex())
+		if lb.GetSelectedRows().Length() > 0 {
+			id, err := row.GetName()
+			if err != nil {
+				log.Printf("Error getting row id: %s", err)
+				listView.UnselectAll()
+			} else {
+				entry := h.GetEntry(id)
+				bus.Publish("request:loaded", entry.RR)
+			}
 		}
 	})
 
@@ -43,7 +51,12 @@ func GetSidebar(h *storage.History) (*gtk.Grid, *gtk.ListBox) {
 	return sideGrid, listView
 }
 
-func AddHistoryRow(h *storage.History, historyListbox *gtk.ListBox, key string, method, path string, statusCode int) *gtk.ListBoxRow {
+func AddHistoryRow(
+	h *storage.History,
+	historyListbox *gtk.ListBox,
+	key string,
+	reqRes storage.RequestResponse,
+) *gtk.ListBoxRow {
 	listRow, _ := gtk.ListBoxRowNew()
 	box, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
 	btn, _ := gtk.ButtonNewFromIconName("edit-delete-symbolic", gtk.ICON_SIZE_BUTTON)
@@ -52,17 +65,17 @@ func AddHistoryRow(h *storage.History, historyListbox *gtk.ListBox, key string, 
 
 	lblMethod, _ := gtk.LabelNew("")
 	lblMethod.SetHExpand(true)
-	if statusCode <= 299 {
-		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='green'>%s</span>`, method))
-	} else if statusCode > 299 && statusCode < 399 {
-		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='orange'>%s</span>`, method))
+	if reqRes.Response.StatusCode <= 299 {
+		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='green'>%s</span>`, reqRes.Request.Method))
+	} else if reqRes.Response.StatusCode > 299 && reqRes.Response.StatusCode < 399 {
+		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='orange'>%s</span>`, reqRes.Request.Method))
 	} else {
-		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='red'>%s</span>`, method))
+		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='red'>%s</span>`, reqRes.Request.Method))
 	}
 
 	sep, _ := gtk.SeparatorMenuItemNew()
 
-	lblPath, _ := gtk.LabelNew(path)
+	lblPath, _ := gtk.LabelNew(reqRes.Request.Path)
 	lblPath.SetHExpand(true)
 
 	box.Add(lblMethod)
@@ -72,10 +85,11 @@ func AddHistoryRow(h *storage.History, historyListbox *gtk.ListBox, key string, 
 
 	listRow.Add(box)
 	listRow.SetHExpand(true)
+	listRow.SetName(key)
 
 	btn.Connect("clicked", func() {
 		historyListbox.Remove(listRow)
-		h.RemoveEntry(key)
+		go h.RemoveEntry(key)
 	})
 
 	historyListbox.Prepend(listRow)

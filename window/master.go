@@ -3,16 +3,18 @@ package window
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
+	evbus "github.com/asaskevich/EventBus"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
 	"github.com/lnenad/probster/communication"
 	"github.com/lnenad/probster/helpers"
 	"github.com/lnenad/probster/storage"
-	history "github.com/lnenad/probster/storage"
 )
 
 var headerRegex = regexp.MustCompile(`^[\w-]+$`)
@@ -23,8 +25,17 @@ const (
 	ColumnValue
 )
 
+var supportedMethods = []string{
+	"GET",
+	"POST",
+	"PUT",
+	"PATCH",
+	"DELETE",
+	"HEAD",
+}
+
 // BuildWindow is used to build main app window
-func BuildWindow(application *gtk.Application, h *history.History) *gtk.ApplicationWindow {
+func BuildWindow(application *gtk.Application, h *storage.History, bus evbus.Bus) *gtk.ApplicationWindow {
 	win, err := gtk.ApplicationWindowNew(application)
 	if err != nil {
 		log.Fatal("Unable to create window:", err)
@@ -83,7 +94,7 @@ func BuildWindow(application *gtk.Application, h *history.History) *gtk.Applicat
 	// Create the action "win.new-request"
 	nRequest := glib.SimpleActionNew("new-request", nil)
 	nRequest.Connect("activate", func() {
-		fmt.Println("New request bro")
+		bus.Publish("request:new")
 	})
 	win.AddAction(nRequest)
 
@@ -167,9 +178,9 @@ func BuildWindow(application *gtk.Application, h *history.History) *gtk.Applicat
 		if err != nil {
 			log.Fatal("Unable to get tree view selected rows:", err)
 		}
-		log.Infof("%#v\n", selected)
+		log.Printf("%#v\n", selected)
 		selected.Foreach(func(item interface{}) {
-			log.Infof("%#v\n", item)
+			log.Printf("%#v\n", item)
 			iter, err := requestStore.GetIter(item.(*gtk.TreePath))
 			if err != nil {
 				log.Fatal("Unable to get tree view iter:", err)
@@ -228,20 +239,48 @@ func BuildWindow(application *gtk.Application, h *history.History) *gtk.Applicat
 
 	actionBar, responseStatusLbl, requestDurationLbl := GetActionbar()
 
-	sideBar, historyListbox := GetSidebar(h)
+	sideBar, historyListbox := GetSidebar(h, bus)
 
-	pathHeader := getPathGrid(
+	pathHeader, pathInput, pathMethod := getPathGrid(
 		h,
+		bus,
 		errorDiag,
 		requestText,
+		requestStore,
+		requestBodyWindow,
+	)
+
+	bus.Subscribe("request:completed", requestCompleted(
+		h,
+		historyListbox,
+		responseText,
+		responseStore,
+		responseStatusLbl,
+		requestDurationLbl,
+	))
+
+	bus.Subscribe("request:loaded", requestLoaded(
+		h,
+		pathInput,
+		pathMethod,
+		historyListbox,
 		responseText,
 		requestStore,
 		responseStore,
 		responseStatusLbl,
 		requestDurationLbl,
-		requestBodyWindow,
+	))
+
+	bus.Subscribe("request:new", requestNew(
+		pathInput,
+		pathMethod,
 		historyListbox,
-	)
+		responseText,
+		requestStore,
+		responseStore,
+		responseStatusLbl,
+		requestDurationLbl,
+	))
 
 	mainGrid.Add(pathHeader)
 	mainGrid.Add(pane)
@@ -264,6 +303,125 @@ func BuildWindow(application *gtk.Application, h *history.History) *gtk.Applicat
 	return win
 }
 
+func requestCompleted(
+	h *storage.History,
+	historyListbox *gtk.ListBox,
+	responseText *gtk.TextView,
+	responseStore *gtk.ListStore,
+	responseStatusLbl *gtk.Label,
+	requestDurationLbl *gtk.Label,
+) func(reqRes storage.RequestResponse) error {
+	return func(reqRes storage.RequestResponse) error {
+		helpers.DisplaySource(
+			resolveContentType(reqRes.Response.Headers),
+			responseText,
+			string(reqRes.Response.ResponseBody),
+		)
+		responseStore.Clear()
+		for name, values := range reqRes.Response.Headers {
+			for _, value := range values {
+				AddRowToStore(responseStore, name, value)
+			}
+		}
+		responseStatusLbl.SetText(fmt.Sprintf("Status Code: %d", reqRes.Response.StatusCode))
+		requestDurationLbl.SetText(fmt.Sprintf("Request Duration: %d ms", reqRes.Response.Dur.Milliseconds()))
+		key := []byte(time.Now().Format(storage.HistoryKeyFormat))
+		AddHistoryRow(
+			h,
+			historyListbox,
+			string(key),
+			reqRes,
+		)
+
+		h.RequestCompleted(key, reqRes)
+		return nil
+	}
+}
+
+func requestLoaded(
+	h *storage.History,
+	pathInput *gtk.Entry,
+	pathMethod *gtk.ComboBoxText,
+	historyListbox *gtk.ListBox,
+	responseText *gtk.TextView,
+	requestStore *gtk.ListStore,
+	responseStore *gtk.ListStore,
+	responseStatusLbl *gtk.Label,
+	requestDurationLbl *gtk.Label,
+) func(reqRes storage.RequestResponse) error {
+	return func(reqRes storage.RequestResponse) error {
+		helpers.DisplaySource(
+			resolveContentType(reqRes.Response.Headers),
+			responseText,
+			string(reqRes.Response.ResponseBody),
+		)
+		requestStore.Clear()
+		responseStore.Clear()
+		for name, values := range reqRes.Response.Headers {
+			for _, value := range values {
+				AddRowToStore(responseStore, name, value)
+			}
+		}
+		for name, values := range reqRes.Request.Headers {
+			for _, value := range values {
+				AddRowToStore(requestStore, name, value)
+			}
+		}
+		responseStatusLbl.SetText(fmt.Sprintf("Status Code: %d", reqRes.Response.StatusCode))
+		requestDurationLbl.SetText(fmt.Sprintf("Request Duration: %d ms", reqRes.Response.Dur.Milliseconds()))
+
+		pathInput.SetText(reqRes.Request.Path)
+		for idx, v := range supportedMethods {
+			if v == reqRes.Request.Method {
+				pathMethod.SetActive(idx)
+				return nil
+			}
+		}
+		pathMethod.SetActive(0)
+
+		return nil
+	}
+}
+
+func requestNew(
+	pathInput *gtk.Entry,
+	pathMethod *gtk.ComboBoxText,
+	historyListbox *gtk.ListBox,
+	responseText *gtk.TextView,
+	requestStore *gtk.ListStore,
+	responseStore *gtk.ListStore,
+	responseStatusLbl *gtk.Label,
+	requestDurationLbl *gtk.Label,
+) func() error {
+	return func() error {
+		helpers.DisplaySource(
+			"",
+			responseText,
+			"",
+		)
+		requestStore.Clear()
+		responseStore.Clear()
+		historyListbox.UnselectAll()
+		responseStatusLbl.SetText("Status Code: ---")
+		requestDurationLbl.SetText("Request Duration: --- ms")
+
+		pathInput.SetText("https://")
+		pathMethod.SetActive(0)
+
+		return nil
+	}
+}
+
+func resolveContentType(headers map[string][]string) string {
+	var contentType string
+	if val, ok := headers["content-type"]; ok {
+		contentType = val[0]
+	} else {
+		contentType = ""
+	}
+	return contentType
+}
+
 func setMargins(iw gtk.IWidget, top, right, bot, left int) {
 	w := iw.ToWidget()
 	w.SetMarginTop(top)
@@ -273,15 +431,13 @@ func setMargins(iw gtk.IWidget, top, right, bot, left int) {
 }
 
 func getPathGrid(
-	h *history.History,
+	h *storage.History,
+	bus evbus.Bus,
 	errorDiag *gtk.MessageDialog,
-	requestText, responseText *gtk.TextView,
-	requestStore, responseStore *gtk.ListStore,
-	responseStatusLbl *gtk.Label,
-	requestDurationLbl *gtk.Label,
+	requestText *gtk.TextView,
+	requestStore *gtk.ListStore,
 	requestBodyWindow *gtk.ScrolledWindow,
-	historyListbox *gtk.ListBox,
-) *gtk.Grid {
+) (*gtk.Grid, *gtk.Entry, *gtk.ComboBoxText) {
 	pathGrid, err := gtk.GridNew()
 	if err != nil {
 		log.Fatal("Unable to create pathGrid:", err)
@@ -292,12 +448,9 @@ func getPathGrid(
 	if err != nil {
 		log.Fatal("Unable to create pathMethod:", err)
 	}
-	pathMethod.AppendText("GET")
-	pathMethod.AppendText("POST")
-	pathMethod.AppendText("PUT")
-	pathMethod.AppendText("PATCH")
-	pathMethod.AppendText("DELETE")
-	pathMethod.AppendText("HEAD")
+	for _, method := range supportedMethods {
+		pathMethod.AppendText(method)
+	}
 	pathMethod.SetActive(0)
 	pathMethod.SetTooltipText("Select the request method")
 
@@ -343,41 +496,23 @@ func getPathGrid(
 			if err != nil {
 				log.Fatal("Unable to retrieve text from requestTextView:", err)
 			}
-			requstHeaders := getListStoreContents(requestStore)
+			requestHeaders := getListStoreContents(requestStore)
 			start := time.Now()
-			response, responseBody := communication.Send(path, method, requstHeaders, requestBody)
+			response, responseBody := communication.Send(path, method, requestHeaders, requestBody)
 			log.Printf("Response: %#v\n", response)
-			glib.IdleAdd(func(reqRes history.RequestResponse) {
-				var contentType string
-				if val, ok := reqRes.Response.Headers["content-type"]; ok {
-					contentType = val[0]
-				} else {
-					contentType = ""
-				}
-				helpers.DisplaySource(contentType, responseText, string(reqRes.Response.ResponseBody))
-				responseStore.Clear()
-				for name, values := range reqRes.Response.Headers {
-					for _, value := range values {
-						AddRowToStore(responseStore, name, value)
-					}
-				}
-				responseStatusLbl.SetText(fmt.Sprintf("Status Code: %d", reqRes.Response.StatusCode))
-				requestDurationLbl.SetText(fmt.Sprintf("Request Duration: %d ms", reqRes.Response.Dur.Milliseconds()))
-				key := []byte(time.Now().Format(storage.HistoryKeyFormat))
-				AddHistoryRow(h, historyListbox, string(key), method, path, reqRes.Response.StatusCode)
 
+			glib.IdleAdd(func(reqRes storage.RequestResponse) {
+				bus.Publish("request:completed", reqRes)
 				sendRequestBtn.SetSensitive(true)
-
-				h.RequestCompleted(key, reqRes)
-			}, history.RequestResponse{
-				Request: history.RequestInput{
+			}, storage.RequestResponse{
+				Request: storage.RequestInput{
 					Path:    path,
 					Method:  method,
-					Headers: requstHeaders,
+					Headers: requestHeaders,
 				},
-				Response: history.RequestResult{
+				Response: storage.RequestResult{
 					StatusCode:   response.StatusCode,
-					Headers:      response.Header,
+					Headers:      resolveResponseHeaders(response.Header),
 					ResponseBody: responseBody,
 					Dur:          time.Now().Sub(start),
 				},
@@ -391,7 +526,19 @@ func getPathGrid(
 	pathGrid.Add(sendRequestBtn)
 
 	pathGrid.SetHExpand(true)
-	return pathGrid
+	return pathGrid, pathInput, pathMethod
+}
+
+func resolveResponseHeaders(headers http.Header) map[string][]string {
+	responseHeaders := make(map[string][]string)
+	for n, vals := range headers {
+		name := strings.ToLower(n)
+		responseHeaders[name] = []string{}
+		for _, v := range vals {
+			responseHeaders[name] = append(responseHeaders[name], v)
+		}
+	}
+	return responseHeaders
 }
 
 func getListStoreContents(store *gtk.ListStore) map[string][]string {
@@ -475,7 +622,7 @@ func createColumn(errorDiag *gtk.MessageDialog, title string, id int, editable b
 
 	if editable {
 		cellRenderer.Connect("edited", func(crt *gtk.CellRendererText, row string, value string) {
-			log.Infof("Edited: %#v %#v %#v %#v\n", title, id, row, value)
+			log.Printf("Edited: %#v %#v %#v %#v\n", title, id, row, value)
 			rowIter, err := listStore.GetIterFromString(row)
 			if err != nil {
 				log.Fatal("Unable to get row iter:", err)

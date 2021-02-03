@@ -30,7 +30,7 @@ type RequestResult struct {
 	Dur          time.Duration
 }
 
-type HistoryList map[string]RequestResponse
+type HistoryList []HistoryEntry
 
 type HistoryEntry struct {
 	Key string
@@ -43,14 +43,14 @@ type History struct {
 
 const bucketName = "history"
 
-func Setup(db *nutsdb.DB) History {
+func SetupHistory(db *nutsdb.DB) History {
 	return History{
 		db,
 	}
 }
 
-func (h *History) GetAllRequests() HistoryList {
-	hl := make(HistoryList)
+func (h *History) GetAllRequests(sort bool) HistoryList {
+	var hl HistoryList
 	if err := h.db.View(
 		func(tx *nutsdb.Tx) error {
 			entries, err := tx.GetAll(bucketName)
@@ -64,7 +64,10 @@ func (h *History) GetAllRequests() HistoryList {
 				if err != nil {
 					return err
 				}
-				hl[string(entry.Key)] = rqrs
+				hl = append(hl, HistoryEntry{
+					string(entry.Key),
+					rqrs,
+				})
 			}
 
 			return nil
