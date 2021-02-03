@@ -1,7 +1,6 @@
 package communication
 
 import (
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -10,7 +9,7 @@ import (
 
 // Send sends the HTTP request
 func Send(url, method string, headers map[string][]string, body string) (*http.Response, []byte) {
-	fmt.Printf("Sending rq: %#v %#v %#v %#v \n", url, method, headers, body)
+	log.Printf("Sending rq: %#v %#v %#v %#v \n", url, method, headers, body)
 	// create request body
 	var reqBody *strings.Reader
 	var req *http.Request

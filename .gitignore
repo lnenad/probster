@@ -2,3 +2,4 @@ go.sum
 probster.exe
 build/probster.exe
 build/share
+data

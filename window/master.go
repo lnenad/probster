@@ -3,7 +3,6 @@ package window
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"net/url"
 	"regexp"
 	"time"
@@ -12,6 +11,8 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 	"github.com/lnenad/probster/communication"
 	"github.com/lnenad/probster/helpers"
+	"github.com/lnenad/probster/storage"
+	history "github.com/lnenad/probster/storage"
 )
 
 var headerRegex = regexp.MustCompile(`^[\w-]+$`)
@@ -22,15 +23,8 @@ const (
 	ColumnValue
 )
 
-// RequestResult holds response information
-type RequestResult struct {
-	response     *http.Response
-	responseBody []byte
-	dur          time.Duration
-}
-
 // BuildWindow is used to build main app window
-func BuildWindow(application *gtk.Application) *gtk.ApplicationWindow {
+func BuildWindow(application *gtk.Application, h *history.History) *gtk.ApplicationWindow {
 	win, err := gtk.ApplicationWindowNew(application)
 	if err != nil {
 		log.Fatal("Unable to create window:", err)
@@ -154,14 +148,14 @@ func BuildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 		log.Fatal("Unable to create requestHeadersButtonBox:", err)
 	}
 
-	setMargins(requestHeadersButtonBox, 0, 10, 5, 0)
+	setMargins(requestHeadersButtonBox, 5, 5, 5, 0)
 
 	requestTreeScroll, requestTreeView, requestStore := setupTreeView(errorDiag, true)
 	deleteRequestHeaderBtn, _ := gtk.ButtonNewWithLabel("Delete selected header")
 	addRequestHeaderBtn, _ := gtk.ButtonNewWithLabel("Add a new header")
 
 	addRequestHeaderBtn.Connect("clicked", func() {
-		addRow(requestStore, "Name", "Value")
+		AddRowToStore(requestStore, "Name", "Value")
 	})
 
 	deleteRequestHeaderBtn.Connect("clicked", func() {
@@ -173,9 +167,9 @@ func BuildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 		if err != nil {
 			log.Fatal("Unable to get tree view selected rows:", err)
 		}
-		fmt.Printf("%#v\n", selected)
+		log.Infof("%#v\n", selected)
 		selected.Foreach(func(item interface{}) {
-			fmt.Printf("%#v\n", item)
+			log.Infof("%#v\n", item)
 			iter, err := requestStore.GetIter(item.(*gtk.TreePath))
 			if err != nil {
 				log.Fatal("Unable to get tree view iter:", err)
@@ -234,9 +228,10 @@ func BuildWindow(application *gtk.Application) *gtk.ApplicationWindow {
 
 	actionBar, responseStatusLbl, requestDurationLbl := GetActionbar()
 
-	sideBar, historyListbox := GetSidebar()
+	sideBar, historyListbox := GetSidebar(h)
 
 	pathHeader := getPathGrid(
+		h,
 		errorDiag,
 		requestText,
 		responseText,
@@ -277,47 +272,8 @@ func setMargins(iw gtk.IWidget, top, right, bot, left int) {
 	w.SetMarginStart(left)
 }
 
-func addHistoryRow(historyListbox *gtk.ListBox, method, path string, statusCode int) *gtk.ListBoxRow {
-	listRow, _ := gtk.ListBoxRowNew()
-	box, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
-	btn, _ := gtk.ButtonNewFromIconName("edit-delete-symbolic", gtk.ICON_SIZE_BUTTON)
-	btn.SetHAlign(gtk.ALIGN_END)
-	btn.SetTooltipText("Remove this history entry")
-
-	lblMethod, _ := gtk.LabelNew("")
-	lblMethod.SetHExpand(true)
-	if statusCode <= 299 {
-		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='green'>%s</span>`, method))
-	} else if statusCode > 299 && statusCode < 399 {
-		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='orange'>%s</span>`, method))
-	} else {
-		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='red'>%s</span>`, method))
-	}
-
-	sep, _ := gtk.SeparatorMenuItemNew()
-
-	lblPath, _ := gtk.LabelNew(path)
-	lblPath.SetHExpand(true)
-
-	box.Add(lblMethod)
-	box.Add(sep)
-	box.Add(lblPath)
-	box.Add(btn)
-
-	listRow.Add(box)
-	listRow.SetHExpand(true)
-
-	btn.Connect("clicked", func() {
-		historyListbox.Remove(listRow)
-	})
-
-	historyListbox.Prepend(listRow)
-	historyListbox.ShowAll()
-
-	return listRow
-}
-
 func getPathGrid(
+	h *history.History,
 	errorDiag *gtk.MessageDialog,
 	requestText, responseText *gtk.TextView,
 	requestStore, responseStore *gtk.ListStore,
@@ -370,33 +326,17 @@ func getPathGrid(
 		method := pathMethod.GetActiveText()
 
 		res, err := url.Parse(path)
-		fmt.Printf("\n%#v %#v\n", res, err)
 		if err != nil {
 			errorDiag.FormatSecondaryText(fmt.Sprintf("Invalid URL provided. %s", err))
 			errorDiag.Run()
 			return
 		}
 		if res.Scheme != "http" && res.Scheme != "https" {
-			errorDiag.FormatSecondaryText(fmt.Sprintf("Invalid Scheme provided. Please start the url with http:// or https://"))
+			errorDiag.FormatSecondaryText(fmt.Sprintf("Invalid URL Scheme provided.\nPlease start the url with http:// or https://"))
 			errorDiag.Run()
 			return
 		}
 		sendRequestBtn.SetSensitive(false)
-
-		requestCompleted := func(reqRes RequestResult) {
-			contentType := reqRes.response.Header.Get("content-type")
-			helpers.DisplaySource(contentType, responseText, string(reqRes.responseBody))
-			responseStore.Clear()
-			for name, values := range reqRes.response.Header {
-				for _, value := range values {
-					addRow(responseStore, name, value)
-				}
-			}
-			responseStatusLbl.SetText(fmt.Sprintf("Status Code: %d", reqRes.response.StatusCode))
-			requestDurationLbl.SetText(fmt.Sprintf("Request Duration: %d ms", reqRes.dur.Milliseconds()))
-			addHistoryRow(historyListbox, method, path, reqRes.response.StatusCode)
-			sendRequestBtn.SetSensitive(true)
-		}
 
 		go func() {
 			requestBody, err := getText(requestText)
@@ -406,11 +346,41 @@ func getPathGrid(
 			requstHeaders := getListStoreContents(requestStore)
 			start := time.Now()
 			response, responseBody := communication.Send(path, method, requstHeaders, requestBody)
-			fmt.Printf("Response: %#v\n", response)
-			glib.IdleAdd(requestCompleted, RequestResult{
-				response:     response,
-				responseBody: responseBody,
-				dur:          time.Now().Sub(start),
+			log.Printf("Response: %#v\n", response)
+			glib.IdleAdd(func(reqRes history.RequestResponse) {
+				var contentType string
+				if val, ok := reqRes.Response.Headers["content-type"]; ok {
+					contentType = val[0]
+				} else {
+					contentType = ""
+				}
+				helpers.DisplaySource(contentType, responseText, string(reqRes.Response.ResponseBody))
+				responseStore.Clear()
+				for name, values := range reqRes.Response.Headers {
+					for _, value := range values {
+						AddRowToStore(responseStore, name, value)
+					}
+				}
+				responseStatusLbl.SetText(fmt.Sprintf("Status Code: %d", reqRes.Response.StatusCode))
+				requestDurationLbl.SetText(fmt.Sprintf("Request Duration: %d ms", reqRes.Response.Dur.Milliseconds()))
+				key := []byte(time.Now().Format(storage.HistoryKeyFormat))
+				AddHistoryRow(h, historyListbox, string(key), method, path, reqRes.Response.StatusCode)
+
+				sendRequestBtn.SetSensitive(true)
+
+				h.RequestCompleted(key, reqRes)
+			}, history.RequestResponse{
+				Request: history.RequestInput{
+					Path:    path,
+					Method:  method,
+					Headers: requstHeaders,
+				},
+				Response: history.RequestResult{
+					StatusCode:   response.StatusCode,
+					Headers:      response.Header,
+					ResponseBody: responseBody,
+					Dur:          time.Now().Sub(start),
+				},
 			})
 		}()
 	})
@@ -505,7 +475,7 @@ func createColumn(errorDiag *gtk.MessageDialog, title string, id int, editable b
 
 	if editable {
 		cellRenderer.Connect("edited", func(crt *gtk.CellRendererText, row string, value string) {
-			fmt.Printf("Edited: %#v %#v %#v %#v\n", title, id, row, value)
+			log.Infof("Edited: %#v %#v %#v %#v\n", title, id, row, value)
 			rowIter, err := listStore.GetIterFromString(row)
 			if err != nil {
 				log.Fatal("Unable to get row iter:", err)
@@ -551,7 +521,7 @@ func setupTreeView(errorDiag *gtk.MessageDialog, editable bool) (*gtk.ScrolledWi
 }
 
 // Append a row to the list store for the tree view
-func addRow(listStore *gtk.ListStore, key, value string) {
+func AddRowToStore(listStore *gtk.ListStore, key, value string) {
 	// Get an iterator for a new row at the end of the list store
 	iter := listStore.Append()
 

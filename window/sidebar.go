@@ -2,11 +2,13 @@ package window
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/gotk3/gotk3/gtk"
+	"github.com/lnenad/probster/storage"
 )
 
-func GetSidebar() (*gtk.Grid, *gtk.ListBox) {
+func GetSidebar(h *storage.History) (*gtk.Grid, *gtk.ListBox) {
 	sideGrid, _ := gtk.GridNew()
 	sideGrid.SetOrientation(gtk.ORIENTATION_VERTICAL)
 	sideGrid.SetVExpand(true)
@@ -16,13 +18,15 @@ func GetSidebar() (*gtk.Grid, *gtk.ListBox) {
 	listView.SetVExpand(true)
 	listView.SetHExpand(true)
 
-	addHistoryRow(listView, "GET", "https://httpbin.org/get", 200)
-	addHistoryRow(listView, "POST", "https://httpbin.org/post", 201)
-	addHistoryRow(listView, "POST", "https://httpbin.org/post", 405)
-	addHistoryRow(listView, "POST", "https://httpbin.org/post", 303)
+	requestHistory := h.GetAllRequests()
+	for key, entry := range requestHistory {
+		AddHistoryRow(h, listView, key, entry.Request.Method, entry.Request.Path, entry.Response.StatusCode)
+	}
 
 	listView.Connect("row_selected", func(lb *gtk.ListBox, row *gtk.ListBoxRow) {
-		fmt.Printf("%#v\n", row.GetIndex())
+		if lb.GetChildren().Length() > 0 {
+			log.Printf("%#v\n", row.GetIndex())
+		}
 	})
 
 	historyLbl, _ := gtk.LabelNew("")
@@ -37,4 +41,45 @@ func GetSidebar() (*gtk.Grid, *gtk.ListBox) {
 	sideGrid.Add(listView)
 
 	return sideGrid, listView
+}
+
+func AddHistoryRow(h *storage.History, historyListbox *gtk.ListBox, key string, method, path string, statusCode int) *gtk.ListBoxRow {
+	listRow, _ := gtk.ListBoxRowNew()
+	box, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
+	btn, _ := gtk.ButtonNewFromIconName("edit-delete-symbolic", gtk.ICON_SIZE_BUTTON)
+	btn.SetHAlign(gtk.ALIGN_END)
+	btn.SetTooltipText("Remove this history entry")
+
+	lblMethod, _ := gtk.LabelNew("")
+	lblMethod.SetHExpand(true)
+	if statusCode <= 299 {
+		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='green'>%s</span>`, method))
+	} else if statusCode > 299 && statusCode < 399 {
+		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='orange'>%s</span>`, method))
+	} else {
+		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='red'>%s</span>`, method))
+	}
+
+	sep, _ := gtk.SeparatorMenuItemNew()
+
+	lblPath, _ := gtk.LabelNew(path)
+	lblPath.SetHExpand(true)
+
+	box.Add(lblMethod)
+	box.Add(sep)
+	box.Add(lblPath)
+	box.Add(btn)
+
+	listRow.Add(box)
+	listRow.SetHExpand(true)
+
+	btn.Connect("clicked", func() {
+		historyListbox.Remove(listRow)
+		h.RemoveEntry(key)
+	})
+
+	historyListbox.Prepend(listRow)
+	historyListbox.ShowAll()
+
+	return listRow
 }
