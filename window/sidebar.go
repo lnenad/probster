@@ -2,7 +2,8 @@ package window
 
 import (
 	"fmt"
-	"log"
+
+	log "github.com/sirupsen/logrus"
 
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/gotk3/gotk3/gtk"
@@ -15,11 +16,21 @@ func GetSidebar(h *storage.History, bus evbus.Bus) (*gtk.Grid, *gtk.ListBox) {
 	sideGrid.SetVExpand(true)
 	sideGrid.SetHExpand(true)
 
+	// Allow to scroll the text
+	scrolledWindow, err := gtk.ScrolledWindowNew(nil, nil)
+	if err != nil {
+		log.Fatal("Unable to create ScrolledWindow:", err)
+	}
+
 	listView, _ := gtk.ListBoxNew()
 	listView.SetVExpand(true)
 	listView.SetHExpand(true)
 
-	requestHistory := h.GetAllRequests(true)
+	scrolledWindow.SetVExpand(true)
+	scrolledWindow.SetHExpand(true)
+	scrolledWindow.Add(listView)
+
+	requestHistory := h.GetAllRequests()
 	for _, entry := range requestHistory {
 		AddHistoryRow(h, listView, entry.Key, entry.RR)
 	}
@@ -46,7 +57,7 @@ func GetSidebar(h *storage.History, bus evbus.Bus) (*gtk.Grid, *gtk.ListBox) {
 
 	sideGrid.Add(historyLbl)
 	sideGrid.Add(historySep)
-	sideGrid.Add(listView)
+	sideGrid.Add(scrolledWindow)
 
 	return sideGrid, listView
 }

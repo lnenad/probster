@@ -7,7 +7,8 @@ import (
 	"html"
 	"io"
 	"io/ioutil"
-	"log"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/alecthomas/chroma"
 	"github.com/alecthomas/chroma/formatters"

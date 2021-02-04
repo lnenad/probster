@@ -2,13 +2,14 @@ package communication
 
 import (
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Send sends the HTTP request
-func Send(url, method string, headers map[string][]string, body string) (*http.Response, []byte) {
+func Send(url, method string, headers map[string][]string, body string) (*http.Response, []byte, error) {
 	log.Printf("Sending rq: %#v %#v %#v %#v \n", url, method, headers, body)
 	// create request body
 	var reqBody *strings.Reader
@@ -42,7 +43,7 @@ func Send(url, method string, headers map[string][]string, body string) (*http.R
 
 	// check for response error
 	if err != nil {
-		log.Fatal("Error:", err)
+		return res, nil, err
 	}
 
 	// read response body
@@ -51,5 +52,5 @@ func Send(url, method string, headers map[string][]string, body string) (*http.R
 	// close response body
 	defer res.Body.Close()
 
-	return res, data
+	return res, data, nil
 }

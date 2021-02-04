@@ -1,7 +1,9 @@
 package main
 
 import (
-	"log"
+	"fmt"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/lnenad/probster/storage"
 	"github.com/lnenad/probster/window"
@@ -15,25 +17,17 @@ import (
 )
 
 const appID = "com.mockadillo.probster"
-const dataFile = "/data/file"
-const logFile = "/data/log"
+const dataFile = "data/db"
+const logFile = "data/log"
 
 func main() {
+	parseArgs()
+
 	application, err := gtk.ApplicationNew(appID, glib.APPLICATION_FLAGS_NONE)
 	if err != nil {
 		log.Fatal("Could not create application:", err)
 	}
 
-	// fmt.Printf("OS ARGS: %#v", os.Args)
-	// if len(os.Args) >= 2 && os.Args[1] == "debug" {
-	// 	f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	// 	if err != nil {
-	// 		log.Fatalf("error opening file: %v", err)
-	// 	}
-	// 	defer f.Close()
-
-	// 	log.SetOutput(f)
-	// }
 	opt := nutsdb.DefaultOptions
 	opt.Dir = dataFile
 	db, err := nutsdb.Open(opt)
@@ -61,5 +55,23 @@ func main() {
 		application.AddAction(aQuit)
 	})
 
+	application.Connect("command-line", func(app glib.Application, args ...interface{}) {
+		fmt.Printf("ARGS: %#v", args)
+	})
+
 	os.Exit(application.Run(os.Args))
+}
+
+func parseArgs() {
+	if len(os.Args) >= 2 && os.Args[1] == "debug" {
+		f, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			log.Fatalf("error opening file: %v", err)
+		}
+		defer f.Close()
+
+		log.SetOutput(f)
+
+		os.Args = os.Args[:1]
+	}
 }

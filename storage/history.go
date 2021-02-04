@@ -2,8 +2,9 @@ package storage
 
 import (
 	"encoding/json"
-	"log"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/xujiajun/nutsdb"
 )
@@ -49,7 +50,7 @@ func SetupHistory(db *nutsdb.DB) History {
 	}
 }
 
-func (h *History) GetAllRequests(sort bool) HistoryList {
+func (h *History) GetAllRequests() HistoryList {
 	var hl HistoryList
 	if err := h.db.View(
 		func(tx *nutsdb.Tx) error {
@@ -102,6 +103,21 @@ func (h *History) RemoveEntry(key string) {
 		func(tx *nutsdb.Tx) error {
 			if err := tx.Delete(bucketName, []byte(key)); err != nil {
 				return err
+			}
+			return nil
+		}); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (h *History) RemoveAll() {
+	list := h.GetAllRequests()
+	if err := h.db.Update(
+		func(tx *nutsdb.Tx) error {
+			for _, entry := range list {
+				if err := tx.Delete(bucketName, []byte(entry.Key)); err != nil {
+					return err
+				}
 			}
 			return nil
 		}); err != nil {

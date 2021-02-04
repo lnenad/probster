@@ -1,0 +1,143 @@
+package window
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/gotk3/gotk3/gtk"
+	"github.com/lnenad/probster/helpers"
+	"github.com/lnenad/probster/storage"
+)
+
+func clearHistory(
+	h *storage.History,
+	historyListbox *gtk.ListBox,
+) func() error {
+	return func() error {
+		chl := historyListbox.GetChildren()
+		chl.Foreach(func(ch interface{}) {
+			historyListbox.Remove(ch.(*gtk.Widget))
+		})
+		h.RemoveAll()
+		return nil
+	}
+}
+
+func resolveContentType(headers map[string][]string) string {
+	var contentType string
+	if val, ok := headers["content-type"]; ok {
+		contentType = val[0]
+	} else {
+		contentType = ""
+	}
+	return contentType
+}
+
+func requestCompleted(
+	h *storage.History,
+	historyListbox *gtk.ListBox,
+	responseText *gtk.TextView,
+	responseStore *gtk.ListStore,
+	responseStatusLbl *gtk.Label,
+	requestDurationLbl *gtk.Label,
+) func(reqRes storage.RequestResponse) error {
+	return func(reqRes storage.RequestResponse) error {
+		helpers.DisplaySource(
+			resolveContentType(reqRes.Response.Headers),
+			responseText,
+			string(reqRes.Response.ResponseBody),
+		)
+		responseStore.Clear()
+		for name, values := range reqRes.Response.Headers {
+			for _, value := range values {
+				AddRowToStore(responseStore, name, value)
+			}
+		}
+		responseStatusLbl.SetText(fmt.Sprintf("Status Code: %d", reqRes.Response.StatusCode))
+		requestDurationLbl.SetText(fmt.Sprintf("Request Duration: %d ms", reqRes.Response.Dur.Milliseconds()))
+		key := []byte(time.Now().Format(storage.HistoryKeyFormat))
+		AddHistoryRow(
+			h,
+			historyListbox,
+			string(key),
+			reqRes,
+		)
+
+		h.RequestCompleted(key, reqRes)
+		return nil
+	}
+}
+
+func requestLoaded(
+	h *storage.History,
+	pathInput *gtk.Entry,
+	pathMethod *gtk.ComboBoxText,
+	historyListbox *gtk.ListBox,
+	responseText *gtk.TextView,
+	requestStore *gtk.ListStore,
+	responseStore *gtk.ListStore,
+	responseStatusLbl *gtk.Label,
+	requestDurationLbl *gtk.Label,
+) func(reqRes storage.RequestResponse) error {
+	return func(reqRes storage.RequestResponse) error {
+		helpers.DisplaySource(
+			resolveContentType(reqRes.Response.Headers),
+			responseText,
+			string(reqRes.Response.ResponseBody),
+		)
+		requestStore.Clear()
+		responseStore.Clear()
+		for name, values := range reqRes.Response.Headers {
+			for _, value := range values {
+				AddRowToStore(responseStore, name, value)
+			}
+		}
+		for name, values := range reqRes.Request.Headers {
+			for _, value := range values {
+				AddRowToStore(requestStore, name, value)
+			}
+		}
+		responseStatusLbl.SetText(fmt.Sprintf("Status Code: %d", reqRes.Response.StatusCode))
+		requestDurationLbl.SetText(fmt.Sprintf("Request Duration: %d ms", reqRes.Response.Dur.Milliseconds()))
+
+		pathInput.SetText(reqRes.Request.Path)
+		for idx, v := range supportedMethods {
+			if v == reqRes.Request.Method {
+				pathMethod.SetActive(idx)
+				return nil
+			}
+		}
+		pathMethod.SetActive(0)
+
+		return nil
+	}
+}
+
+func requestNew(
+	pathInput *gtk.Entry,
+	pathMethod *gtk.ComboBoxText,
+	historyListbox *gtk.ListBox,
+	responseText *gtk.TextView,
+	requestStore *gtk.ListStore,
+	responseStore *gtk.ListStore,
+	responseStatusLbl *gtk.Label,
+	requestDurationLbl *gtk.Label,
+) func() error {
+	return func() error {
+		helpers.DisplaySource(
+			"",
+			responseText,
+			"",
+		)
+		requestStore.Clear()
+		responseStore.Clear()
+		historyListbox.UnselectAll()
+		responseStatusLbl.SetText("Status Code: ---")
+		requestDurationLbl.SetText("Request Duration: --- ms")
+
+		pathInput.SetText("https://")
+		pathMethod.SetActive(0)
+
+		return nil
+	}
+}
