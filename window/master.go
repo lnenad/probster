@@ -10,7 +10,6 @@ import (
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
-	"github.com/lnenad/probster/helpers"
 	"github.com/lnenad/probster/storage"
 )
 
@@ -79,8 +78,6 @@ func BuildWindow(application *gtk.Application, h *storage.History, bus evbus.Bus
 	if err != nil {
 		log.Fatal("Unable to create paned:", err)
 	}
-
-	helpers.LoadAndDisplaySource("application/json", requestText, "test.json")
 
 	requestNotebook, err := gtk.NotebookNew()
 	if err != nil {
@@ -183,9 +180,15 @@ func BuildWindow(application *gtk.Application, h *storage.History, bus evbus.Bus
 	responseFrame.Add(responseNotebook)
 	pane.Add2(responseFrame)
 
-	actionBar, responseStatusLbl, requestDurationLbl := GetActionbar()
+	actionBar, highlightCheckbutton, responseStatusLbl, requestDurationLbl := GetActionbar()
 
 	sideBar, historyListbox := GetSidebar(h, bus)
+
+	highlightCheckbutton.Connect("clicked", reloadResponseBody(
+		h,
+		highlightCheckbutton,
+		responseText,
+	))
 
 	pathHeader, pathInput, pathMethod := getPathGrid(
 		h,
@@ -198,6 +201,7 @@ func BuildWindow(application *gtk.Application, h *storage.History, bus evbus.Bus
 
 	bus.Subscribe("request:completed", requestCompleted(
 		h,
+		highlightCheckbutton,
 		historyListbox,
 		responseText,
 		responseStore,
@@ -207,9 +211,11 @@ func BuildWindow(application *gtk.Application, h *storage.History, bus evbus.Bus
 
 	bus.Subscribe("request:loaded", requestLoaded(
 		h,
+		highlightCheckbutton,
 		pathInput,
 		pathMethod,
 		historyListbox,
+		requestText,
 		responseText,
 		requestStore,
 		responseStore,
@@ -218,6 +224,7 @@ func BuildWindow(application *gtk.Application, h *storage.History, bus evbus.Bus
 	))
 
 	bus.Subscribe("request:new", requestNew(
+		h,
 		pathInput,
 		pathMethod,
 		historyListbox,
@@ -240,15 +247,21 @@ func BuildWindow(application *gtk.Application, h *storage.History, bus evbus.Bus
 
 	windowPane, _ := gtk.PanedNew(gtk.ORIENTATION_HORIZONTAL)
 
-	windowPane.Add(sideBar)
-	windowPane.Add(mainGrid)
+	sideBar.SetSizeRequest(250, 600)
+	windowPane.Pack1(sideBar, true, false)
+	windowPane.Pack2(mainGrid, true, true)
 	win.Add(windowPane)
 	win.SetPosition(gtk.WIN_POS_MOUSE)
 	win.SetDefaultSize(900, 700)
 
 	win.ShowAll()
 
-	requestBodyWindow.SetVisible(false)
+	currMethod := pathMethod.GetActiveText()
+	if currMethod == "GET" || currMethod == "HEAD" {
+		requestBodyWindow.SetVisible(false)
+	} else {
+		requestBodyWindow.SetVisible(true)
+	}
 
 	return win
 }
@@ -326,6 +339,7 @@ func getScrollableTextView(frameLabel string) (*gtk.ScrolledWindow, *gtk.TextVie
 	textView.SetHExpand(true)
 	textView.SetVExpand(true)
 	textView.SetMarginStart(5)
+	textView.SetWrapMode(gtk.WRAP_WORD)
 
 	// Allow to scroll the text
 	scrolledWindow, err := gtk.ScrolledWindowNew(nil, nil)

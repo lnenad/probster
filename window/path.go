@@ -94,6 +94,7 @@ func getPathGrid(
 				sendRequestBtn.SetSensitive(true)
 			}, storage.RequestResponse{
 				Request: storage.RequestInput{
+					Body:    requestBody,
 					Path:    path,
 					Method:  method,
 					Headers: requestHeaders,

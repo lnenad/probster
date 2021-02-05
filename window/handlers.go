@@ -35,6 +35,7 @@ func resolveContentType(headers map[string][]string) string {
 
 func requestCompleted(
 	h *storage.History,
+	highlightCheckbutton *gtk.CheckButton,
 	historyListbox *gtk.ListBox,
 	responseText *gtk.TextView,
 	responseStore *gtk.ListStore,
@@ -46,6 +47,7 @@ func requestCompleted(
 			resolveContentType(reqRes.Response.Headers),
 			responseText,
 			string(reqRes.Response.ResponseBody),
+			highlightCheckbutton.GetActive(),
 		)
 		responseStore.Clear()
 		for name, values := range reqRes.Response.Headers {
@@ -64,15 +66,19 @@ func requestCompleted(
 		)
 
 		h.RequestCompleted(key, reqRes)
+		h.SetActiveRecord(&reqRes)
+
 		return nil
 	}
 }
 
 func requestLoaded(
 	h *storage.History,
+	highlightCheckbutton *gtk.CheckButton,
 	pathInput *gtk.Entry,
 	pathMethod *gtk.ComboBoxText,
 	historyListbox *gtk.ListBox,
+	requestText *gtk.TextView,
 	responseText *gtk.TextView,
 	requestStore *gtk.ListStore,
 	responseStore *gtk.ListStore,
@@ -84,7 +90,10 @@ func requestLoaded(
 			resolveContentType(reqRes.Response.Headers),
 			responseText,
 			string(reqRes.Response.ResponseBody),
+			highlightCheckbutton.GetActive(),
 		)
+		rqTxtBuff, _ := requestText.GetBuffer()
+		rqTxtBuff.SetText(reqRes.Request.Body)
 		requestStore.Clear()
 		responseStore.Clear()
 		for name, values := range reqRes.Response.Headers {
@@ -101,6 +110,8 @@ func requestLoaded(
 		requestDurationLbl.SetText(fmt.Sprintf("Request Duration: %d ms", reqRes.Response.Dur.Milliseconds()))
 
 		pathInput.SetText(reqRes.Request.Path)
+		h.SetActiveRecord(&reqRes)
+
 		for idx, v := range supportedMethods {
 			if v == reqRes.Request.Method {
 				pathMethod.SetActive(idx)
@@ -113,7 +124,26 @@ func requestLoaded(
 	}
 }
 
+func reloadResponseBody(
+	h *storage.History,
+	highlightCheckbutton *gtk.CheckButton,
+	responseText *gtk.TextView,
+) func() error {
+	return func() error {
+		reqRes := h.GetActiveRecord()
+		helpers.DisplaySource(
+			resolveContentType(reqRes.Response.Headers),
+			responseText,
+			string(reqRes.Response.ResponseBody),
+			highlightCheckbutton.GetActive(),
+		)
+
+		return nil
+	}
+}
+
 func requestNew(
+	h *storage.History,
 	pathInput *gtk.Entry,
 	pathMethod *gtk.ComboBoxText,
 	historyListbox *gtk.ListBox,
@@ -128,6 +158,7 @@ func requestNew(
 			"",
 			responseText,
 			"",
+			false,
 		)
 		requestStore.Clear()
 		responseStore.Clear()
@@ -137,6 +168,7 @@ func requestNew(
 
 		pathInput.SetText("https://")
 		pathMethod.SetActive(0)
+		h.SetActiveRecord(nil)
 
 		return nil
 	}

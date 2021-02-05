@@ -68,14 +68,14 @@ func AddHistoryRow(
 	key string,
 	reqRes storage.RequestResponse,
 ) *gtk.ListBoxRow {
-	listRow, _ := gtk.ListBoxRowNew()
 	box, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 5)
 	btn, _ := gtk.ButtonNewFromIconName("edit-delete-symbolic", gtk.ICON_SIZE_BUTTON)
-	btn.SetHAlign(gtk.ALIGN_END)
+	btn.SetHAlign(gtk.ALIGN_START)
 	btn.SetTooltipText("Remove this history entry")
 
 	lblMethod, _ := gtk.LabelNew("")
-	lblMethod.SetHExpand(true)
+	//lblMethod.SetHExpand(true)
+	lblMethod.SetWidthChars(10)
 	if reqRes.Response.StatusCode <= 299 {
 		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='green'>%s</span>`, reqRes.Request.Method))
 	} else if reqRes.Response.StatusCode > 299 && reqRes.Response.StatusCode < 399 {
@@ -85,18 +85,24 @@ func AddHistoryRow(
 	}
 
 	sep, _ := gtk.SeparatorMenuItemNew()
+	sep2, _ := gtk.SeparatorMenuItemNew()
 
 	lblPath, _ := gtk.LabelNew(reqRes.Request.Path)
-	lblPath.SetHExpand(true)
+	lblPath.SetHAlign(gtk.ALIGN_START)
+	lblPath.SetMarginStart(10)
+	lblPath.SetMarginEnd(20)
 
+	box.Add(btn)
+	box.Add(sep2)
 	box.Add(lblMethod)
 	box.Add(sep)
 	box.Add(lblPath)
-	box.Add(btn)
 
+	listRow, _ := gtk.ListBoxRowNew()
 	listRow.Add(box)
 	listRow.SetHExpand(true)
 	listRow.SetName(key)
+	listRow.SetTooltipText("Load this request")
 
 	btn.Connect("clicked", func() {
 		historyListbox.Remove(listRow)

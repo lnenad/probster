@@ -7,6 +7,7 @@ import (
 	"html"
 	"io"
 	"io/ioutil"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 
@@ -16,30 +17,46 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 )
 
+const HTMLContentType = "text/html"
+
 // LoadAndDisplaySource
 func LoadAndDisplaySource(contentType string, textView *gtk.TextView, filename string) {
 	text, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log.Fatal("Unable to load file:", err)
 	}
-	DisplaySource(contentType, textView, string(text))
+	DisplaySource(contentType, textView, string(text), true)
 }
 
 // DisplaySource
-func DisplaySource(contentType string, textView *gtk.TextView, text string) {
+func DisplaySource(contentType string, textView *gtk.TextView, text string, highlight bool) {
 	// Get source formatted using pango markup format
-	formattedSource, err := chromaHighlight(contentType, text)
+	if highlight {
+		formattedSource, err := chromaHighlight(contentType, text)
 
-	// fill TextµBuffer with formatted text
-	buff, err := textView.GetBuffer()
-	if err != nil {
-		log.Fatal("Unable to retrieve TextBuffer:", err)
+		// fill TextµBuffer with formatted text
+		buff, err := textView.GetBuffer()
+		if err != nil {
+			log.Fatal("Unable to retrieve TextBuffer:", err)
+		}
+		textView.SetBuffer(nil)
+
+		// Clean text window before fill it
+		buff.Delete(buff.GetStartIter(), buff.GetEndIter())
+
+		// insert markup to the TextBuffer
+		buff.InsertMarkup(buff.GetStartIter(), formattedSource)
+		textView.SetBuffer(buff)
+	} else {
+		// fill TextµBuffer with formatted text
+		buff, err := textView.GetBuffer()
+		if err != nil {
+			log.Fatal("Unable to retrieve TextBuffer:", err)
+		}
+		textView.SetBuffer(nil)
+		buff.SetText(text)
+		textView.SetBuffer(buff)
 	}
-	// Clean text window before fill it
-	buff.Delete(buff.GetStartIter(), buff.GetEndIter())
-
-	// insert markup to the TextBuffer
-	buff.InsertMarkup(buff.GetStartIter(), formattedSource)
 }
 
 // chromaHighlight Syntax highlighter using Chroma syntax
@@ -57,7 +74,7 @@ func chromaHighlight(contentType, inputString string) (out string, err error) {
 	switch contentType {
 	case "application/json":
 		language = "json"
-	case "text/html":
+	case HTMLContentType:
 		language = "html"
 	case "text/xml":
 		fallthrough
@@ -65,6 +82,9 @@ func chromaHighlight(contentType, inputString string) (out string, err error) {
 		fallthrough
 	case "image/svg+xml":
 		language = "xml"
+	}
+	if strings.Contains(contentType, HTMLContentType) {
+		language = "html"
 	}
 	if err = quick.Highlight(writer, inputString, language, "pango", "pygments"); err != nil {
 		return

@@ -1,8 +1,6 @@
 package window
 
 import (
-	"fmt"
-
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gotk3/gotk3/gtk"
@@ -58,7 +56,6 @@ func getConfirmDialog(win *gtk.ApplicationWindow) *ConfirmationDialog {
 	var yesno bool
 
 	confirmDiag.Connect("response", func(msd *gtk.MessageDialog, result int) bool {
-		fmt.Printf("Confirm %#v\n", result)
 		confirmDiag.Hide()
 		switch result {
 		case -5:

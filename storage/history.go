@@ -18,6 +18,7 @@ type RequestResponse struct {
 
 // RequestInput holds the request information
 type RequestInput struct {
+	Body    string
 	Method  string
 	Path    string
 	Headers map[string][]string
@@ -39,7 +40,8 @@ type HistoryEntry struct {
 }
 
 type History struct {
-	db *nutsdb.DB
+	db           *nutsdb.DB
+	activeRecord *RequestResponse
 }
 
 const bucketName = "history"
@@ -47,7 +49,16 @@ const bucketName = "history"
 func SetupHistory(db *nutsdb.DB) History {
 	return History{
 		db,
+		&RequestResponse{},
 	}
+}
+
+func (h *History) SetActiveRecord(rr *RequestResponse) {
+	h.activeRecord = rr
+}
+
+func (h *History) GetActiveRecord() *RequestResponse {
+	return h.activeRecord
 }
 
 func (h *History) GetAllRequests() HistoryList {
