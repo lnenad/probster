@@ -10,7 +10,7 @@ import (
 	"github.com/gotk3/gotk3/gtk"
 )
 
-func registerMenu(win *gtk.ApplicationWindow, bus evbus.Bus, confirmDiag *ConfirmationDialog) {
+func registerMenu(win *gtk.ApplicationWindow, bus evbus.Bus, confirmDiag *ConfirmationDialog, aboutDiag *AboutDialog) {
 	// Create a header bar
 	header, err := gtk.HeaderBarNew()
 	if err != nil {
@@ -36,6 +36,8 @@ func registerMenu(win *gtk.ApplicationWindow, bus evbus.Bus, confirmDiag *Confir
 	// Other prefixes can be added to widgets via InsertActionGroup
 	menu.Append("New Request", "win.new-request")
 	menu.Append("Clear history", "win.clear-history")
+	menu.Append("Preferences", "win.preferences")
+	menu.Append("About", "win.about")
 	menu.Append("Quit", "app.quit")
 
 	// Create the action "win.close"
@@ -48,6 +50,20 @@ func registerMenu(win *gtk.ApplicationWindow, bus evbus.Bus, confirmDiag *Confir
 		})
 	})
 	win.AddAction(aClearHistory)
+
+	// Create the action "win.close"
+	aPreferences := glib.SimpleActionNew("preferences", nil)
+	aPreferences.Connect("activate", func() {
+		bus.Publish("history:clear")
+	})
+	win.AddAction(aPreferences)
+
+	// Create the action "win.close"
+	aAbout := glib.SimpleActionNew("about", nil)
+	aAbout.Connect("activate", func() {
+		aboutDiag.ShowAbout()
+	})
+	win.AddAction(aAbout)
 
 	// Create the action "win.new-request"
 	aNewRequest := glib.SimpleActionNew("new-request", nil)

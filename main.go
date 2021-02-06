@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	log "github.com/sirupsen/logrus"
 
 	"github.com/lnenad/probster/storage"
@@ -13,15 +11,22 @@ import (
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	gv "github.com/hashicorp/go-version"
 	"github.com/xujiajun/nutsdb"
 )
 
 const appID = "com.mockadillo.probster"
 const dataFile = "data/db"
 const logFile = "data/log"
+const versionString = "0.4.1"
 
 func main() {
 	parseArgs()
+
+	currentVersion, err := gv.NewVersion(versionString)
+	if err != nil {
+		log.Fatal("Error setting version: ", err)
+	}
 
 	application, err := gtk.ApplicationNew(appID, glib.APPLICATION_FLAGS_NONE)
 	if err != nil {
@@ -40,23 +45,13 @@ func main() {
 	bus := evbus.New()
 
 	application.Connect("activate", func() {
-		window.BuildWindow(application, &h, bus)
-
-		aNew := glib.SimpleActionNew("new", nil)
-		aNew.Connect("activate", func() {
-			window.BuildWindow(application, &h, bus).ShowAll()
-		})
-		application.AddAction(aNew)
+		window.BuildWindow(currentVersion, application, &h, bus)
 
 		aQuit := glib.SimpleActionNew("quit", nil)
 		aQuit.Connect("activate", func() {
 			application.Quit()
 		})
 		application.AddAction(aQuit)
-	})
-
-	application.Connect("command-line", func(app glib.Application, args ...interface{}) {
-		fmt.Printf("ARGS: %#v", args)
 	})
 
 	os.Exit(application.Run(os.Args))

@@ -1,6 +1,7 @@
 package window
 
 import (
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -10,7 +11,9 @@ import (
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/gotk3/gotk3/glib"
 	"github.com/gotk3/gotk3/gtk"
+	gv "github.com/hashicorp/go-version"
 	"github.com/lnenad/probster/storage"
+	"github.com/lnenad/probster/update"
 )
 
 var headerRegex = regexp.MustCompile(`^[\w-]+$`)
@@ -31,7 +34,7 @@ var supportedMethods = []string{
 }
 
 // BuildWindow is used to build main app window
-func BuildWindow(application *gtk.Application, h *storage.History, bus evbus.Bus) *gtk.ApplicationWindow {
+func BuildWindow(currentVersion *gv.Version, application *gtk.Application, h *storage.History, bus evbus.Bus) *gtk.ApplicationWindow {
 	win, err := gtk.ApplicationWindowNew(application)
 	if err != nil {
 		log.Fatal("Unable to create window:", err)
@@ -41,9 +44,15 @@ func BuildWindow(application *gtk.Application, h *storage.History, bus evbus.Bus
 
 	errorDiag := getErrorDialog(win)
 	confirmDiag := getConfirmDialog(win)
+	nDiag := getNotificationDialog(win)
+	aDiag := getAboutDialog(currentVersion)
+
+	if shouldUpdate, newVersion := update.CheckVersion(currentVersion); shouldUpdate {
+		nDiag.ShowNotification(fmt.Sprintf("An update is available.\nYou can download the latest version from the probster.com website\nLatest version is %s", newVersion))
+	}
 
 	// Register header bar with menu
-	registerMenu(win, bus, confirmDiag)
+	registerMenu(win, bus, confirmDiag, aDiag)
 
 	//
 	// START DRAWING

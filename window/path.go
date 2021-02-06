@@ -57,7 +57,8 @@ func getPathGrid(
 			requestBodyWindow.SetVisible(true)
 		}
 	})
-	sendRequestBtn.Connect("clicked", func() {
+
+	performRequest := func() {
 		path, _ := pathInput.GetText()
 		method := pathMethod.GetActiveText()
 
@@ -107,7 +108,11 @@ func getPathGrid(
 				},
 			})
 		}()
-	})
+	}
+
+	pathInput.Connect("activate", performRequest)
+
+	sendRequestBtn.Connect("clicked", performRequest)
 
 	// Assemble the window
 	pathGrid.Add(pathMethod)
