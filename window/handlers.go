@@ -64,6 +64,7 @@ func requestCompleted(
 			string(key),
 			reqRes,
 		)
+		historyListbox.UnselectAll()
 
 		h.RequestCompleted(key, reqRes)
 		h.SetActiveRecord(&reqRes)

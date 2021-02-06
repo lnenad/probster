@@ -247,7 +247,7 @@ func BuildWindow(application *gtk.Application, h *storage.History, bus evbus.Bus
 
 	windowPane, _ := gtk.PanedNew(gtk.ORIENTATION_HORIZONTAL)
 
-	sideBar.SetSizeRequest(250, 600)
+	sideBar.SetSizeRequest(150, 600)
 	windowPane.Pack1(sideBar, true, false)
 	windowPane.Pack2(mainGrid, true, true)
 	win.Add(windowPane)

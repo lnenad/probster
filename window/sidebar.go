@@ -16,18 +16,15 @@ func GetSidebar(h *storage.History, bus evbus.Bus) (*gtk.Grid, *gtk.ListBox) {
 	sideGrid.SetVExpand(true)
 	sideGrid.SetHExpand(true)
 
-	// Allow to scroll the text
+	// Allow to scroll the entries
 	scrolledWindow, err := gtk.ScrolledWindowNew(nil, nil)
 	if err != nil {
 		log.Fatal("Unable to create ScrolledWindow:", err)
 	}
 
 	listView, _ := gtk.ListBoxNew()
-	listView.SetVExpand(true)
-	listView.SetHExpand(true)
 
 	scrolledWindow.SetVExpand(true)
-	scrolledWindow.SetHExpand(true)
 	scrolledWindow.Add(listView)
 
 	requestHistory := h.GetAllRequests()
@@ -75,7 +72,7 @@ func AddHistoryRow(
 
 	lblMethod, _ := gtk.LabelNew("")
 	//lblMethod.SetHExpand(true)
-	lblMethod.SetWidthChars(10)
+	lblMethod.SetWidthChars(11)
 	if reqRes.Response.StatusCode <= 299 {
 		lblMethod.SetMarkup(fmt.Sprintf(`<span size='large' foreground='green'>%s</span>`, reqRes.Request.Method))
 	} else if reqRes.Response.StatusCode > 299 && reqRes.Response.StatusCode < 399 {
