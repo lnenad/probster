@@ -201,6 +201,7 @@ func getNotificationDialog(win *gtk.ApplicationWindow) *NotificationDialog {
 
 func getAboutDialog(currentVersion *gv.Version) *AboutDialog {
 	ad, _ := gtk.AboutDialogNew()
+	ad.SetPosition(gtk.WIN_POS_MOUSE)
 	ad.SetProgramName("Probster - REST Easy")
 	ld, _ := gdk.PixbufNewFromFile("icon.png")
 	ad.SetLogo(ld)
