@@ -34,7 +34,14 @@ var supportedMethods = []string{
 }
 
 // BuildWindow is used to build main app window
-func BuildWindow(currentVersion *gv.Version, application *gtk.Application, h *storage.History, bus evbus.Bus) *gtk.ApplicationWindow {
+func BuildWindow(
+	currentVersion *gv.Version,
+	settings *storage.Settings,
+	application *gtk.Application,
+	h *storage.HistoryStorage,
+	st *storage.SettingsStorage,
+	bus evbus.Bus,
+) *gtk.ApplicationWindow {
 	win, err := gtk.ApplicationWindowNew(application)
 	if err != nil {
 		log.Fatal("Unable to create window:", err)
@@ -46,9 +53,14 @@ func BuildWindow(currentVersion *gv.Version, application *gtk.Application, h *st
 	confirmDiag := getConfirmDialog(win)
 	nDiag := getNotificationDialog(win)
 	aDiag := getAboutDialog(currentVersion)
+	sDiag := getSettingsDialog(win, settings, bus)
 
-	if shouldUpdate, newVersion := update.CheckVersion(currentVersion); shouldUpdate {
-		nDiag.ShowNotification(fmt.Sprintf("An update is available.\nYou can download the latest version from the probster.com website\nLatest version is %s", newVersion))
+	if should, ok := (*settings)[storage.SettingCheckUpdates].(bool); ok && should {
+		if shouldUpdate, newVersion := update.CheckVersion(currentVersion); shouldUpdate {
+			nDiag.ShowNotification(fmt.Sprintf("An update is available.\nYou can download the latest version from the probster.com website\nLatest version is %s", newVersion))
+		} else {
+			log.Infof("Software is up to date. Version: %s", newVersion)
+		}
 	}
 
 	// Register header bar with menu
@@ -193,11 +205,14 @@ func BuildWindow(currentVersion *gv.Version, application *gtk.Application, h *st
 
 	sideBar, historyListbox := GetSidebar(h, bus)
 
-	highlightCheckbutton.Connect("clicked", reloadResponseBody(
+	reloadResponseBodyFn := reloadResponseBody(
 		h,
+		settings,
 		highlightCheckbutton,
 		responseText,
-	))
+	)
+
+	highlightCheckbutton.Connect("clicked", reloadResponseBodyFn)
 
 	pathHeader, pathInput, pathMethod := getPathGrid(
 		h,
@@ -210,6 +225,7 @@ func BuildWindow(currentVersion *gv.Version, application *gtk.Application, h *st
 
 	bus.Subscribe("request:completed", requestCompleted(
 		h,
+		settings,
 		highlightCheckbutton,
 		historyListbox,
 		responseText,
@@ -220,6 +236,7 @@ func BuildWindow(currentVersion *gv.Version, application *gtk.Application, h *st
 
 	bus.Subscribe("request:loaded", requestLoaded(
 		h,
+		settings,
 		highlightCheckbutton,
 		pathInput,
 		pathMethod,
@@ -234,6 +251,7 @@ func BuildWindow(currentVersion *gv.Version, application *gtk.Application, h *st
 
 	bus.Subscribe("request:new", requestNew(
 		h,
+		settings,
 		pathInput,
 		pathMethod,
 		historyListbox,
@@ -248,6 +266,15 @@ func BuildWindow(currentVersion *gv.Version, application *gtk.Application, h *st
 		h,
 		historyListbox,
 	))
+
+	bus.Subscribe("preferences:updated", settingsUpdated(
+		st,
+		reloadResponseBodyFn,
+	))
+
+	bus.Subscribe("preferences:show", func() {
+		sDiag.Show()
+	})
 
 	mainGrid.Add(pathHeader)
 	mainGrid.Add(pane)

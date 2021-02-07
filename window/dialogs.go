@@ -1,7 +1,12 @@
 package window
 
 import (
+	"fmt"
+
+	"github.com/alecthomas/chroma/styles"
+	evbus "github.com/asaskevich/EventBus"
 	gv "github.com/hashicorp/go-version"
+	"github.com/lnenad/probster/storage"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/gotk3/gotk3/gdk"
@@ -11,6 +16,11 @@ import (
 type ConfirmationDialog struct {
 	widget *gtk.MessageDialog
 	yesno  *bool
+}
+
+type SettingsDialog struct {
+	widget *gtk.Window
+	Show   func()
 }
 
 type ErrorDialog struct {
@@ -88,6 +98,87 @@ func getConfirmDialog(win *gtk.ApplicationWindow) *ConfirmationDialog {
 	confirmDiag.SetTitle("Please confirm")
 
 	return &ConfirmationDialog{confirmDiag, &yesno}
+}
+
+func getSettingsDialog(win *gtk.ApplicationWindow, settings *storage.Settings, bus evbus.Bus) *SettingsDialog {
+	settingsDiag, _ := gtk.WindowNew(gtk.WINDOW_TOPLEVEL)
+
+	settingsDiag.SetTitle("Preferences")
+	settingsDiag.SetPosition(gtk.WIN_POS_MOUSE)
+	settingsDiag.SetKeepAbove(true)
+	settingsDiag.SetResizable(false)
+
+	b, _ := gtk.BoxNew(gtk.ORIENTATION_VERTICAL, 20)
+	setMargins(b, 10, 30, 15, 30)
+
+	l, _ := gtk.LabelNew("")
+	l.SetMarkup(fmt.Sprintf("<span size='large' weight='bold'>Preferences</span>"))
+	setMargins(l, 0, 0, 20, 0)
+
+	updates, _ := gtk.CheckButtonNewWithLabel("Check for updates on startup")
+	setMargins(updates, 0, 0, 40, 0)
+
+	ltheme, _ := gtk.LabelNew("Syntax highlight theme")
+	theme, _ := gtk.ComboBoxTextNew()
+	setMargins(theme, 0, 0, 40, 0)
+
+	bbox, _ := gtk.BoxNew(gtk.ORIENTATION_HORIZONTAL, 20)
+
+	bs, _ := gtk.ButtonNewWithLabel("Save")
+	bc, _ := gtk.ButtonNewWithLabel("Close")
+
+	bbox.Add(bs)
+	bbox.Add(bc)
+	bbox.SetHAlign(gtk.ALIGN_CENTER)
+
+	applyCurrentValues := func() {
+		// Set current values
+		if val, ok := (*settings)[storage.SettingCheckUpdates].(bool); ok {
+			updates.SetActive(val)
+		}
+
+		var chosenTheme string
+		if val, ok := (*settings)[storage.SettingTheme].(string); ok {
+			chosenTheme = val
+		}
+
+		for k, v := range styles.Names() {
+			theme.AppendText(v)
+			if v == chosenTheme {
+				theme.SetActive(k)
+			}
+		}
+	}
+
+	applyCurrentValues()
+
+	b.Add(l)
+	b.Add(updates)
+	b.Add(ltheme)
+	b.Add(theme)
+	b.Add(bbox)
+
+	settingsDiag.Add(b)
+
+	bs.Connect("clicked", func() {
+		newSettings := storage.Settings{
+			storage.SettingTheme:        theme.GetActiveText(),
+			storage.SettingCheckUpdates: updates.GetActive(),
+		}
+		*settings = newSettings
+		bus.Publish("preferences:updated", newSettings)
+		settingsDiag.Hide()
+	})
+	bc.Connect("clicked", func() {
+		settingsDiag.Hide()
+	})
+
+	showFunc := func() {
+		applyCurrentValues()
+		settingsDiag.ShowAll()
+	}
+
+	return &SettingsDialog{settingsDiag, showFunc}
 }
 
 func getNotificationDialog(win *gtk.ApplicationWindow) *NotificationDialog {

@@ -54,7 +54,7 @@ func registerMenu(win *gtk.ApplicationWindow, bus evbus.Bus, confirmDiag *Confir
 	// Create the action "win.close"
 	aPreferences := glib.SimpleActionNew("preferences", nil)
 	aPreferences.Connect("activate", func() {
-		bus.Publish("history:clear")
+		bus.Publish("preferences:show")
 	})
 	win.AddAction(aPreferences)
 

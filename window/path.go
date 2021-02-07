@@ -14,7 +14,7 @@ import (
 )
 
 func getPathGrid(
-	h *storage.History,
+	h *storage.HistoryStorage,
 	bus evbus.Bus,
 	errorDiag *ErrorDialog,
 	requestText *gtk.TextView,

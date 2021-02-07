@@ -9,8 +9,20 @@ import (
 	"github.com/lnenad/probster/storage"
 )
 
+func settingsUpdated(
+	st *storage.SettingsStorage,
+	reloadResponseBodyFn func() error,
+) func(storage.Settings) error {
+	return func(newSettings storage.Settings) error {
+		for k, v := range newSettings {
+			st.UpdateSetting(k, v)
+		}
+		return reloadResponseBodyFn()
+	}
+}
+
 func clearHistory(
-	h *storage.History,
+	h *storage.HistoryStorage,
 	historyListbox *gtk.ListBox,
 ) func() error {
 	return func() error {
@@ -34,7 +46,8 @@ func resolveContentType(headers map[string][]string) string {
 }
 
 func requestCompleted(
-	h *storage.History,
+	h *storage.HistoryStorage,
+	settings *storage.Settings,
 	highlightCheckbutton *gtk.CheckButton,
 	historyListbox *gtk.ListBox,
 	responseText *gtk.TextView,
@@ -48,6 +61,7 @@ func requestCompleted(
 			responseText,
 			string(reqRes.Response.ResponseBody),
 			highlightCheckbutton.GetActive(),
+			settings,
 		)
 		responseStore.Clear()
 		for name, values := range reqRes.Response.Headers {
@@ -74,7 +88,8 @@ func requestCompleted(
 }
 
 func requestLoaded(
-	h *storage.History,
+	h *storage.HistoryStorage,
+	settings *storage.Settings,
 	highlightCheckbutton *gtk.CheckButton,
 	pathInput *gtk.Entry,
 	pathMethod *gtk.ComboBoxText,
@@ -92,6 +107,7 @@ func requestLoaded(
 			responseText,
 			string(reqRes.Response.ResponseBody),
 			highlightCheckbutton.GetActive(),
+			settings,
 		)
 		rqTxtBuff, _ := requestText.GetBuffer()
 		rqTxtBuff.SetText(reqRes.Request.Body)
@@ -126,7 +142,8 @@ func requestLoaded(
 }
 
 func reloadResponseBody(
-	h *storage.History,
+	h *storage.HistoryStorage,
+	settings *storage.Settings,
 	highlightCheckbutton *gtk.CheckButton,
 	responseText *gtk.TextView,
 ) func() error {
@@ -137,6 +154,7 @@ func reloadResponseBody(
 			responseText,
 			string(reqRes.Response.ResponseBody),
 			highlightCheckbutton.GetActive(),
+			settings,
 		)
 
 		return nil
@@ -144,7 +162,8 @@ func reloadResponseBody(
 }
 
 func requestNew(
-	h *storage.History,
+	h *storage.HistoryStorage,
+	settings *storage.Settings,
 	pathInput *gtk.Entry,
 	pathMethod *gtk.ComboBoxText,
 	historyListbox *gtk.ListBox,
@@ -160,6 +179,7 @@ func requestNew(
 			responseText,
 			"",
 			false,
+			settings,
 		)
 		requestStore.Clear()
 		responseStore.Clear()

@@ -10,7 +10,7 @@ import (
 	"github.com/lnenad/probster/storage"
 )
 
-func GetSidebar(h *storage.History, bus evbus.Bus) (*gtk.Grid, *gtk.ListBox) {
+func GetSidebar(h *storage.HistoryStorage, bus evbus.Bus) (*gtk.Grid, *gtk.ListBox) {
 	sideGrid, _ := gtk.GridNew()
 	sideGrid.SetOrientation(gtk.ORIENTATION_VERTICAL)
 	sideGrid.SetVExpand(true)
@@ -60,7 +60,7 @@ func GetSidebar(h *storage.History, bus evbus.Bus) (*gtk.Grid, *gtk.ListBox) {
 }
 
 func AddHistoryRow(
-	h *storage.History,
+	h *storage.HistoryStorage,
 	historyListbox *gtk.ListBox,
 	key string,
 	reqRes storage.RequestResponse,

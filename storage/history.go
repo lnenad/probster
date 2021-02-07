@@ -39,33 +39,33 @@ type HistoryEntry struct {
 	RR  RequestResponse
 }
 
-type History struct {
+type HistoryStorage struct {
 	db           *nutsdb.DB
 	activeRecord *RequestResponse
 }
 
-const bucketName = "history"
+const bucketNameHistory = "history"
 
-func SetupHistory(db *nutsdb.DB) History {
-	return History{
+func SetupHistory(db *nutsdb.DB) HistoryStorage {
+	return HistoryStorage{
 		db,
 		&RequestResponse{},
 	}
 }
 
-func (h *History) SetActiveRecord(rr *RequestResponse) {
+func (h *HistoryStorage) SetActiveRecord(rr *RequestResponse) {
 	h.activeRecord = rr
 }
 
-func (h *History) GetActiveRecord() *RequestResponse {
+func (h *HistoryStorage) GetActiveRecord() *RequestResponse {
 	return h.activeRecord
 }
 
-func (h *History) GetAllRequests() HistoryList {
+func (h *HistoryStorage) GetAllRequests() HistoryList {
 	var hl HistoryList
 	if err := h.db.View(
 		func(tx *nutsdb.Tx) error {
-			entries, err := tx.GetAll(bucketName)
+			entries, err := tx.GetAll(bucketNameHistory)
 			if err != nil {
 				return err
 			}
@@ -93,14 +93,14 @@ func (h *History) GetAllRequests() HistoryList {
 	return hl
 }
 
-func (h *History) RequestCompleted(key []byte, reqRes RequestResponse) {
+func (h *HistoryStorage) RequestCompleted(key []byte, reqRes RequestResponse) {
 	val, err := json.Marshal(reqRes)
 	if err != nil {
 		log.Fatal("Error marshaling reqres data: ", err)
 	}
 	if err := h.db.Update(
 		func(tx *nutsdb.Tx) error {
-			if err := tx.Put(bucketName, key, val, 0); err != nil {
+			if err := tx.Put(bucketNameHistory, key, val, 0); err != nil {
 				return err
 			}
 			return nil
@@ -109,10 +109,10 @@ func (h *History) RequestCompleted(key []byte, reqRes RequestResponse) {
 	}
 }
 
-func (h *History) RemoveEntry(key string) {
+func (h *HistoryStorage) RemoveEntry(key string) {
 	if err := h.db.Update(
 		func(tx *nutsdb.Tx) error {
-			if err := tx.Delete(bucketName, []byte(key)); err != nil {
+			if err := tx.Delete(bucketNameHistory, []byte(key)); err != nil {
 				return err
 			}
 			return nil
@@ -121,12 +121,12 @@ func (h *History) RemoveEntry(key string) {
 	}
 }
 
-func (h *History) RemoveAll() {
+func (h *HistoryStorage) RemoveAll() {
 	list := h.GetAllRequests()
 	if err := h.db.Update(
 		func(tx *nutsdb.Tx) error {
 			for _, entry := range list {
-				if err := tx.Delete(bucketName, []byte(entry.Key)); err != nil {
+				if err := tx.Delete(bucketNameHistory, []byte(entry.Key)); err != nil {
 					return err
 				}
 			}
@@ -136,11 +136,11 @@ func (h *History) RemoveAll() {
 	}
 }
 
-func (h *History) GetEntry(key string) HistoryEntry {
+func (h *HistoryStorage) GetEntry(key string) HistoryEntry {
 	var he HistoryEntry
 	if err := h.db.View(
 		func(tx *nutsdb.Tx) error {
-			entry, err := tx.Get(bucketName, []byte(key))
+			entry, err := tx.Get(bucketNameHistory, []byte(key))
 			if err != nil {
 				return err
 			}

@@ -42,10 +42,14 @@ func main() {
 	defer db.Close()
 
 	h := storage.SetupHistory(db)
+	st := storage.SetupSettings(db)
+
+	settings := st.GetAll()
+
 	bus := evbus.New()
 
 	application.Connect("activate", func() {
-		window.BuildWindow(currentVersion, application, &h, bus)
+		window.BuildWindow(currentVersion, &settings, application, &h, &st, bus)
 
 		aQuit := glib.SimpleActionNew("quit", nil)
 		aQuit.Connect("activate", func() {

@@ -2,7 +2,6 @@ package update
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"runtime"
 
@@ -38,19 +37,16 @@ func CheckVersion(current *gv.Version) (bool, string) {
 
 	switch runtime.GOOS {
 	case "windows":
-		fmt.Println("Hello from Windows")
 		latest, err = gv.NewVersion(vr.Windows)
 		if err != nil {
 			log.Printf("Invalid version response from server: %s", err)
 		}
 	case "linux":
-		fmt.Println("Hello from linux")
 		latest, err = gv.NewVersion(vr.Ubuntu)
 		if err != nil {
 			log.Printf("Invalid version response from server: %s", err)
 		}
 	case "darwin":
-		fmt.Println("Hello from darwin")
 		latest, err = gv.NewVersion(vr.Mac)
 		if err != nil {
 			log.Printf("Invalid version response from server: %s", err)
