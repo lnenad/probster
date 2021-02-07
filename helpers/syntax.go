@@ -3,7 +3,6 @@ package helpers
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"strings"
 
 	"github.com/alecthomas/chroma"
@@ -81,7 +80,7 @@ func chromaHighlight(tbuff *gtk.TextBuffer, contentType, inputString, formatter,
 	formatters.Register("tag", chroma.FormatterFunc(tagFormatter(tbuff)))
 	formatters.Register("pango", chroma.FormatterFunc(pangoFormatter))
 
-	fmt.Println("Chosen theme:", style)
+	log.Println("Chosen theme:", style)
 
 	if err = quick.Highlight(writer, inputString, getLanguage(contentType), formatter, style); err != nil {
 		return "", err

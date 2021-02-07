@@ -2,8 +2,9 @@ package update
 
 import (
 	"encoding/json"
-	"log"
 	"runtime"
+
+	log "github.com/sirupsen/logrus"
 
 	gv "github.com/hashicorp/go-version"
 	"github.com/lnenad/probster/communication"
