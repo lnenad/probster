@@ -25,6 +25,7 @@ func GetSidebar(h *storage.HistoryStorage, bus evbus.Bus) (*gtk.Grid, *gtk.ListB
 	listView, _ := gtk.ListBoxNew()
 
 	scrolledWindow.SetVExpand(true)
+	scrolledWindow.SetHExpand(true)
 	scrolledWindow.Add(listView)
 
 	requestHistory := h.GetAllRequests()
